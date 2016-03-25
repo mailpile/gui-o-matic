@@ -1,4 +1,6 @@
 import json
+import os
+import traceback
 import urllib
 import webbrowser
 
@@ -44,6 +46,15 @@ class BaseIndicator(object):
                 data = json.loads(data)
                 if 'message' in data:
                     self.notify_user(data['message'])
+
+        elif op == "shell":
+            try:
+                for arg in args:
+                    rv = os.system(arg)
+                    if 0 != rv:
+                        raise OSError('Failed with exit code %d: %s' % (rv, arg))
+            except:
+                traceback.print_exc()
 
     def _theme_image(self, pathname):
         return pathname.replace('%(theme)s', self.ICON_THEME)

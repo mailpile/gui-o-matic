@@ -29,7 +29,7 @@
         }
     ]
 }
-OK GO
+OK LISTEN
 tac
 echo 'show_splash_screen {"image": "icons-light/normal.png", "message": "Hello world!", "progress_bar": true}'
 

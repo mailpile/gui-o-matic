@@ -30,7 +30,7 @@ class StdinWatcher(threading.Thread):
                 if not line:
                     break
                 try:
-                    cmd, args = line.split(' ', 1)
+                    cmd, args = line.strip().split(' ', 1)
                     args = json.loads(args)
                     self.do(cmd, args)
                 except (ValueError, IndexError, NameError):
@@ -42,14 +42,17 @@ class StdinWatcher(threading.Thread):
 
 
 indicator, config = None, []
+listen = True
 
 while True:
     line = sys.stdin.readline()
-    if not line or line.strip() == 'OK GO':
+    if not line or line.strip() in ('OK LISTEN', 'OK GO'):
+        listen = 'LISTEN' in line
         break
-    config.append(line)
+    config.append(line.strip())
 config = json.loads(''.join(config))
 
 indicator = AutoIndicator(config)
-StdinWatcher(config, indicator).start()
+if listen:
+    StdinWatcher(config, indicator).start()
 indicator.run()
