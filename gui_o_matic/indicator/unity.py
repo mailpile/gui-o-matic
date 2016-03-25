@@ -127,7 +127,7 @@ class UnityIndicator(BaseIndicator):
             else:
                 pbar = None
 
-            window.set_title(config.get('app_name', 'gui-o-matic'))
+            window.set_title(self.config.get('app_name', 'gui-o-matic'))
             window.set_decorated(False)
             window.set_position(gtk.WIN_POS_CENTER)
             window.set_size_request(width or 240, height or 320)
@@ -173,7 +173,7 @@ class UnityIndicator(BaseIndicator):
             notification.set_urgency(pynotify.URGENCY_NORMAL)
             notification.show()
         else:
-            print 'FIXME: Notify: %s' % message
+            print('FIXME: Notify: %s' % message)
 
     _STATUS_MODES = {
         'startup': appindicator.STATUS_ACTIVE,

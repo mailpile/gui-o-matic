@@ -4,13 +4,13 @@ def AutoIndicator(*args, **kwargs):
     """
 
     try:
-        from macosx import Indicator
+        from gui_o_matic.indicator.macosx import Indicator
         return Indicator(*args, **kwargs)
     except ImportError:
         pass
 
     try:
-        from unity import Indicator
+        from gui_o_matic.indicator.unity import Indicator
         return Indicator(*args, **kwargs)
     except ImportError:
         pass

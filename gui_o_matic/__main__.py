@@ -1,9 +1,10 @@
 import json
+import os
 import sys
 import time
 import threading
 import traceback
-from indicator.auto import AutoIndicator 
+from gui_o_matic.indicator.auto import AutoIndicator
 
 
 class StdinWatcher(threading.Thread):
@@ -17,7 +18,7 @@ class StdinWatcher(threading.Thread):
         if hasattr(self.gui, command):
             getattr(self.gui, command)(**kwargs)
         else:
-            print 'Unknown method: %s' % command
+            print('Unknown method: %s' % command)
 
     def run(self):
         try:
@@ -49,6 +50,6 @@ while True:
     config.append(line)
 config = json.loads(''.join(config))
 
-indicator = AutoIndicator(config) 
+indicator = AutoIndicator(config)
 StdinWatcher(config, indicator).start()
 indicator.run()

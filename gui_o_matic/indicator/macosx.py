@@ -25,7 +25,7 @@ class MacOSXThing(NSObject):
                 if i in self.indicator.callbacks:
                     self.indicator.callbacks[i]()
                 return
-        print 'activated an unknown item: %s' % notification
+        print('activated an unknown item: %s' % notification)
 
 
 class MacOSXIndicator(BaseIndicator):
