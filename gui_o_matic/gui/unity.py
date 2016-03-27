@@ -10,7 +10,7 @@ try:
 except ImportError:
     pynotify = None
 
-from base import BaseIndicator
+from base import BaseGUI
 
 
 ICON_THEME = 'light'
@@ -47,9 +47,9 @@ class UnityWebView():
         self.window.show_all()
 
 
-class UnityIndicator(BaseIndicator):
+class UnityGUI(BaseGUI):
     def __init__(self, config):
-        BaseIndicator.__init__(self, config)
+        BaseGUI.__init__(self, config)
         if pynotify:
             pynotify.init(config.get('app_name', 'gui-o-matic'))
         gobject.threads_init()
@@ -79,7 +79,7 @@ class UnityIndicator(BaseIndicator):
             self.config.get('app_name', 'gui-o-matic').lower() + "-indicator",
             # FIXME: Make these two configurable...
             "indicator-messages", appindicator.CATEGORY_COMMUNICATIONS)
-        self._set_status('startup', now=True)
+        self.set_status('startup', now=True)
         self.ind.set_menu(self.menu)
 
     def update_splash_screen(self, progress=None, message=None):
@@ -182,18 +182,19 @@ class UnityIndicator(BaseIndicator):
         'attention': appindicator.STATUS_ATTENTION,
         'shutdown': appindicator.STATUS_ATTENTION,
     }
-    def _set_status(self, mode, now=False):
+    def set_status(self, status='startup', now=False):
         if now:
             do = lambda o, a: o(a)
         else:
             do = gobject.idle_add
         if 'indicator_icons' in self.config:
-            icon = self.config['indicator_icons'].get(mode)
+            icon = self.config['indicator_icons'].get(status)
             if not icon:
                 icon = self.config['indicator_icons'].get('normal')
             if icon:
                 do(self.ind.set_icon, self._theme_image(icon))
-        do(self.ind.set_status, self._STATUS_MODES[mode])
+        do(self.ind.set_status,
+           self._STATUS_MODES.get(status, appindicator.STATUS_ATTENTION))
 
     def set_menu_label(self, item=None, label=None):
         if item and item in self.items:
@@ -213,4 +214,4 @@ class UnityIndicator(BaseIndicator):
             traceback.print_exc()
 
 
-Indicator = UnityIndicator
+GUI = UnityGUI

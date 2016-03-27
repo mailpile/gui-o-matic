@@ -35,7 +35,7 @@ echo 'show_splash_screen {"image": "icons-light/normal.png", "message": "Hello w
 
 sleep 2
 echo 'update_splash_screen {"progress": 0.2}'
-echo 'set_status_normal {}'
+echo 'set_status {"status": "normal"}'
 
 sleep 2
 echo 'update_splash_screen {"progress": 0.5, "message": "Woohooooo"}'
@@ -45,16 +45,16 @@ echo 'notify_user {"message": "This is a notification"}'
 
 sleep 2
 echo 'update_splash_screen {"progress": 1.0}'
-echo 'set_status_working {}'
+echo 'set_status {"status": "working"}'
 sleep 2
 echo 'hide_splash_screen {}'
-echo 'set_status_attention {}'
+echo 'set_status {"status": "attention"}'
 
 sleep 2
 echo 'set_menu_label {"item": "xkcd", "label": "No really, XKCD"}'
 
 sleep 30
-echo 'set_status_shutdown {}'
+echo 'set_status {"status": "shutdown"}'
 
 sleep 5
 

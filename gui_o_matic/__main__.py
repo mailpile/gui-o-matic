@@ -4,7 +4,7 @@ import sys
 import time
 import threading
 import traceback
-from gui_o_matic.indicator.auto import AutoIndicator
+from gui_o_matic.gui.auto import AutoGUI
 
 
 class StdinWatcher(threading.Thread):
@@ -41,7 +41,7 @@ class StdinWatcher(threading.Thread):
             os._exit(0)
 
 
-indicator, config = None, []
+gui, config = None, []
 listen = True
 
 while True:
@@ -52,7 +52,7 @@ while True:
     config.append(line.strip())
 config = json.loads(''.join(config))
 
-indicator = AutoIndicator(config)
+gui = AutoGUI(config)
 if listen:
-    StdinWatcher(config, indicator).start()
-indicator.run()
+    StdinWatcher(config, gui).start()
+gui.run()

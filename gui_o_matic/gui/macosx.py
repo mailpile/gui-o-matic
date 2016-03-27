@@ -8,7 +8,7 @@ from Foundation import *
 from AppKit import *
 from PyObjCTools import AppHelper
 
-from base import BaseIndicator
+from base import BaseGUI
 
 
 class MacOSXThing(NSObject):
@@ -28,7 +28,7 @@ class MacOSXThing(NSObject):
         print('activated an unknown item: %s' % notification)
 
 
-class MacOSXIndicator(BaseIndicator):
+class MacOSXGUI(BaseGUI):
 
     ICON_THEME = 'osx'  # OS X has its own theme because it is too
                         # dumb to auto-resize menu bar icons.
@@ -72,9 +72,9 @@ class MacOSXIndicator(BaseIndicator):
         self.ind.setHighlightMode_(1)
         #self.ind.setToolTip_('Sync Trigger')
         self.ind.setMenu_(self.menu)
-        self.set_status_startup()
+        self.set_status()
 
-    def _set_status(self, status):
+    def set_status(self, status='startup'):
         self.ind.setImage_(self.images.get(status, self.images['normal']))
 
     def set_menu_label(self, item=None, label=None):
@@ -99,4 +99,4 @@ class MacOSXIndicator(BaseIndicator):
             traceback.print_exc()
 
 
-Indicator = MacOSXIndicator
+GUI = MacOSXGUI

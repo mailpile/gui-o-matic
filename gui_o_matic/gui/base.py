@@ -5,9 +5,9 @@ import urllib
 import webbrowser
 
 
-class BaseIndicator(object):
+class BaseGUI(object):
     """
-    This is the parent Indicator class, which is subclassed by the various
+    This is the parent GUI class, which is subclassed by the various
     platform-specific implementations.
     """
 
@@ -67,23 +67,8 @@ class BaseIndicator(object):
         for item_info in self.config.get('indicator_menu', []):
             self._add_menu_item(**item_info)
 
-    def _set_status(self, status):
+    def set_status(self, status='startup'):
         print 'STATUS: %s' % status
-
-    def set_status_startup(self):
-        self._set_status('startup')
-
-    def set_status_normal(self):
-        self._set_status('normal')
-
-    def set_status_working(self):
-        self._set_status('working')
-
-    def set_status_attention(self):
-        self._set_status('attention')
-
-    def set_status_shutdown(self):
-        self._set_status('shutdown')
 
     def set_menu_label(self, item=None, label=None):
         pass
