@@ -3,16 +3,27 @@ export PARPID=$$
 
 export BASEDIR=$(cd $(dirname "$(readlink -f "$0" || echo "$0")"); pwd)
 export ICON="$BASEDIR/icons/x11-flipper.png"
-export NOTIFY="notify-send -i '$ICON'"
+export NOTIFY="notify-send -t 1500 -i '$ICON' X11-Flipper"
+export ROOTWINID=$(xwininfo -name unity-panel |grep 'Window id:' |cut -f4 -d\ )
 
-export ENABLE_DEVICES="xinput --list |perl -npe 's/^.*id=(\\\\d+).*\$/\$1/' |xargs -L 1 -I DEV xinput set-int-prop DEV 'Device Enabled' 8 1"
-export DISABLE_NONTOUCH="xinput --list |grep -i -v -e master -e Touchscreen -e Power -e hotkeys |perl -npe 's/^.*id=(\\\\d+).*\$/\$1/' |xargs -L 1 -I DEV xinput set-int-prop DEV 'Device Enabled' 8 0"
-export DISABLE_TOUCH="xinput --list |grep -i -v master |grep -e Touchscreen |perl -npe 's/^.*id=(\\\\d+).*\$/\$1/' |xargs -L 1 -I DEV xinput set-int-prop DEV 'Device Enabled' 8 0"
+export DEV_ALL="xinput --list |perl -npe 's/^.*id=(\\\\d+).*\$/\$1/'"
+export DEV_NONTOUCH="xinput --list |grep -i -v -e master -e Touchscreen -e Power -e hotkeys |perl -npe 's/^.*id=(\\\\d+).*\$/\$1/'"
+export DEV_TOUCH="xinput --list |grep -i -v master |grep -e Touchscreen |perl -npe 's/^.*id=(\\\\d+).*\$/\$1/'"
+
+export ENABLE_DEVICES="$DEV_ALL |xargs -L 1 -I DEV xinput set-int-prop DEV 'Device Enabled' 8 1"
+export DISABLE_NONTOUCH="$DEV_NONTOUCH |xargs -L 1 -I DEV xinput set-int-prop DEV 'Device Enabled' 8 0"
+export DISABLE_TOUCH="$DEV_TOUCH |xargs -L 1 -I DEV xinput set-int-prop DEV 'Device Enabled' 8 0"
+
+export ROTATE_TOUCH_LEFT="$DEV_TOUCH |xargs -L 1 -I DEV xinput set-prop DEV 'Coordinate Transformation Matrix' 0 -1 1 1 0 0 0 0 1"
+export ROTATE_TOUCH_RIGHT="$DEV_TOUCH |xargs -L 1 -I DEV xinput set-prop DEV 'Coordinate Transformation Matrix' 0 1 0 -1 0 1 0 0 1"
+export ROTATE_TOUCH_NORMAL="$DEV_TOUCH |xargs -L 1 -I DEV xinput set-prop DEV 'Coordinate Transformation Matrix' 1 0 0 0 1 0 0 0 1"
+export ROTATE_TOUCH_INVERTED="$DEV_TOUCH |xargs -L 1 -I DEV xinput set-prop DEV 'Coordinate Transformation Matrix' -1 0 1 0 -1 1 0 0 1"
 
 (
     cat <<tac
     {
         "app_name": "X11 Flipper",
+        "app_id": "x11-flipper",
         "indicator_icons": {
             "startup": "$ICON"
         },
@@ -22,6 +33,7 @@ export DISABLE_TOUCH="xinput --list |grep -i -v master |grep -e Touchscreen |per
                 "item": "laptop",
                 "op": "shell",
                 "args": ["xrandr -o normal",
+                         "xdg-screensaver resume $ROOTWINID || true",
                          "$ENABLE_DEVICES", "$DISABLE_TOUCH || true",
                          "$NOTIFY 'Laptop mode; disabled touchscreen'"],
                 "sensitive": true
@@ -30,7 +42,9 @@ export DISABLE_TOUCH="xinput --list |grep -i -v master |grep -e Touchscreen |per
                 "item": "tablet",
                 "op": "shell",
                 "args": ["xrandr -o left",
+                         "xdg-screensaver suspend $ROOTWINID || true",
                          "$ENABLE_DEVICES", "$DISABLE_NONTOUCH || true",
+                         "$ROTATE_TOUCH_LEFT || true",
                          "$NOTIFY 'Tablet mode; touchscreen only'"],
                 "sensitive": true
             },{
@@ -38,7 +52,9 @@ export DISABLE_TOUCH="xinput --list |grep -i -v master |grep -e Touchscreen |per
                 "item": "tablet",
                 "op": "shell",
                 "args": ["xrandr -o inverted",
+                         "xdg-screensaver suspend $ROOTWINID || true",
                          "$ENABLE_DEVICES", "$DISABLE_NONTOUCH || true",
+                         "$ROTATE_TOUCH_INVERTED || true",
                          "$NOTIFY 'Tent mode; touchscreen only'"],
                 "sensitive": true
             },{
@@ -46,7 +62,9 @@ export DISABLE_TOUCH="xinput --list |grep -i -v master |grep -e Touchscreen |per
                 "item": "tv",
                 "op": "shell",
                 "args": ["xrandr -o normal",
+                         "xdg-screensaver suspend $ROOTWINID || true",
                          "$ENABLE_DEVICES", "$DISABLE_NONTOUCH || true",
+                         "$ROTATE_TOUCH_NORMAL || true",
                          "$NOTIFY 'Video mode; touchscreen only'"],
                 "sensitive": true
             },{
@@ -54,6 +72,7 @@ export DISABLE_TOUCH="xinput --list |grep -i -v master |grep -e Touchscreen |per
                 "item": "tv",
                 "op": "shell",
                 "args": ["xrandr -o normal", "$ENABLE_DEVICES",
+                         "xdg-screensaver resume $ROOTWINID || true",
                          "$NOTIFY 'All input devices enabled'"],
                 "sensitive": true
             }
@@ -62,6 +81,7 @@ export DISABLE_TOUCH="xinput --list |grep -i -v master |grep -e Touchscreen |per
     OK GO
 tac
 ) | (
+    onboard &
     cd "$BASEDIR/.."
     python -m gui_o_matic
     kill $PARPID
