@@ -52,7 +52,8 @@ class BaseGUI(object):
                 for arg in args:
                     rv = os.system(arg)
                     if 0 != rv:
-                        raise OSError('Failed with exit code %d: %s' % (rv, arg))
+                        raise OSError(
+                            'Failed with exit code %d: %s' % (rv, arg))
             except:
                 traceback.print_exc()
 
@@ -68,7 +69,7 @@ class BaseGUI(object):
             self._add_menu_item(**item_info)
 
     def set_status(self, status='startup'):
-        print 'STATUS: %s' % status
+        print('STATUS: %s' % status)
 
     def set_menu_label(self, item=None, label=None):
         pass
@@ -98,4 +99,4 @@ class BaseGUI(object):
         pass
 
     def notify_user(self, message='Hello'):
-        print 'NOTIFY: %s' % message
+        print('NOTIFY: %s' % message)
