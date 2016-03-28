@@ -19,7 +19,7 @@ expected to expose web- or terminal interfaces which GUI-o-Matic can
 launch as necessary.
 
 When used without a worker, GUI-o-Matic can provide easy point-and-click
-access to shell commands or URLs (see [examples][./examples/]).
+access to shell commands or URLs (see [example scripts][./scripts/]).
 
 Initally written as part of [Mailpile](https://www.mailpile.is/), this
 app is released separately so other projects can make use of it.
@@ -99,7 +99,7 @@ single JSON structure for arguments. Examples:
     notify_user {"message": "Hello World!"}
 
 See below for a full list of available commands. The
-[examples](./examples/) folder contains working examples illustrating
+[scripts](./scripts/) folder contains working examples illustrating
 these concepts.
 
 

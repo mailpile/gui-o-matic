@@ -1,14 +1,16 @@
 #!/bin/bash
+export BASEDIR=$(cd $(dirname "$(readlink -f "$0" || echo "$0")"); pwd)
 (
     cat <<tac
 {
     "app_name": "Indicator Test",
+    "require_gui": "unity macosx",
     "indicator_icons": {
-        "startup": "$(pwd)/icons-%(theme)s/startup.png",
-        "normal": "$(pwd)/icons-%(theme)s/normal.png",
-        "working": "$(pwd)/icons-%(theme)s/working.png",
-        "attention": "$(pwd)/icons-%(theme)s/attention.png",
-        "shutdown": "$(pwd)/icons-%(theme)s/shutdown.png"
+        "startup": "$BASEDIR/icons-%(theme)s/startup.png",
+        "normal": "$BASEDIR/icons-%(theme)s/normal.png",
+        "working": "$BASEDIR/icons-%(theme)s/working.png",
+        "attention": "$BASEDIR/icons-%(theme)s/attention.png",
+        "shutdown": "$BASEDIR/icons-%(theme)s/shutdown.png"
     },
     "indicator_menu": [
         {

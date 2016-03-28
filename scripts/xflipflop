@@ -3,7 +3,7 @@ export PARPID=$$
 
 export BASEDIR=$(cd $(dirname "$(readlink -f "$0" || echo "$0")"); pwd)
 export ICON="$BASEDIR/icons/x11-flipper.png"
-export NOTIFY="notify-send -t 1500 -i '$ICON' X11-Flipper"
+export NOTIFY="notify-send -t 1500 -i '$ICON' xflipflop"
 export ROOTWINID=$(xwininfo -name unity-panel |grep 'Window id:' |cut -f4 -d\ )
 
 export DEV_ALL="xinput --list |perl -npe 's/^.*id=(\\\\d+).*\$/\$1/'"
@@ -22,11 +22,9 @@ export ROTATE_TOUCH_INVERTED="$DEV_TOUCH |xargs -L 1 -I DEV xinput set-prop DEV 
 (
     cat <<tac
     {
-        "app_name": "X11 Flipper",
-        "app_id": "x11-flipper",
-        "indicator_icons": {
-            "startup": "$ICON"
-        },
+        "app_name": "xflipflop",
+        "app_id": "xflipflop",
+        "indicator_icons": {"startup": "$ICON"},
         "indicator_menu": [
             {
                 "label": "Laptop",
