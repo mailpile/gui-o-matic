@@ -24,6 +24,13 @@ def AutoGUI(config, *args, **kwargs):
         except ImportError:
             pass
 
+    if not preferred or 'gtk' in preferred:
+        try:
+            from gui_o_matic.gui.gtkbase import GUI
+            return GUI(config, *args, **kwargs)
+        except ImportError:
+            pass
+
     if preferred and not required:
         config = copy.copy(config)
         for kw in ('prefer_gui', 'require_gui'):

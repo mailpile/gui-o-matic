@@ -63,7 +63,8 @@ class MacOSXGUI(BaseGUI):
 
         # Load all images, set initial
         self.images = {}
-        for s, p in self.config.get('indicator_icons', {}).iteritems():
+        icons = self.config.get('indicator', {}).get('icons', {})
+        for s, p in icons.iteritems():
             p = self._theme_image(p)
             self.images[s] = NSImage.alloc().initByReferencingFile_(p)
         if self.images:
@@ -77,11 +78,11 @@ class MacOSXGUI(BaseGUI):
     def set_status(self, status='startup'):
         self.ind.setImage_(self.images.get(status, self.images['normal']))
 
-    def set_menu_label(self, item=None, label=None):
+    def set_item_label(self, item=None, label=None):
         if item and item in self.items:
             self.items[item].setTitle_(label)
 
-    def set_menu_sensitive(self, item=None, sensitive=True):
+    def set_item_sensitive(self, item=None, sensitive=True):
         if item and item in self.items:
             self.items[item].setEnabled_(sensitive)
 

@@ -1,5 +1,7 @@
+import copy
 import json
 import os
+import subprocess
 import traceback
 import urllib
 import webbrowser
@@ -19,7 +21,7 @@ class BaseGUI(object):
         self._webview = None
 
     def _do(self, op, args):
-        op, args = op.lower(), args[:]
+        op, args = op.lower(), copy.copy(args)
 
         if op == 'show_url':
             self.show_url(url=args[0])
@@ -57,6 +59,22 @@ class BaseGUI(object):
             except:
                 traceback.print_exc()
 
+        elif hasattr(self, op):
+            getattr(self, op)(**(args or {}))
+
+    def terminal(self, command='/bin/bash', title=None, icon=None):
+        cmd = [
+            "xterm",
+            "-T", title or self.config.get('app_name', 'gui-o-matic'),
+            "-e", command]
+        if icon:
+            cmd += ["-n", icon]
+        subprocess.Popen(cmd,
+            close_fds=True,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE)
+
     def _theme_image(self, pathname):
         return pathname.replace('%(theme)s', self.ICON_THEME)
 
@@ -65,16 +83,20 @@ class BaseGUI(object):
         pass
 
     def _create_menu_from_config(self):
-        for item_info in self.config.get('indicator_menu', []):
+        menu = self.config.get('indicator', {}).get('menu', [])
+        for item_info in menu:
             self._add_menu_item(**item_info)
 
     def set_status(self, status='startup'):
         print('STATUS: %s' % status)
 
-    def set_menu_label(self, item=None, label=None):
+    def quit(self):
+        raise KeyboardInterrupt("User quit")
+
+    def set_item_label(self, item=None, label=None):
         pass
 
-    def set_menu_sensitive(self, item=None, sensitive=True):
+    def set_item_sensitive(self, item=None, sensitive=True):
         pass
 
     def update_splash_screen(self, message=None, progress=None):

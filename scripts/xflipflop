@@ -2,7 +2,7 @@
 export PARPID=$$
 
 export BASEDIR=$(cd $(dirname "$(readlink -f "$0" || echo "$0")"); pwd)
-export ICON="$BASEDIR/icons/x11-flipper.png"
+export ICON="$BASEDIR/img/x11-flipper.png"
 export NOTIFY="notify-send -t 1500 -i '$ICON' xflipflop"
 export ROOTWINID=$(xwininfo -name unity-panel |grep 'Window id:' |cut -f4 -d\ )
 
@@ -24,57 +24,59 @@ export ROTATE_TOUCH_INVERTED="$DEV_TOUCH |xargs -L 1 -I DEV xinput set-prop DEV 
     {
         "app_name": "xflipflop",
         "app_id": "xflipflop",
-        "indicator_icons": {"startup": "$ICON"},
-        "indicator_menu": [
-            {
-                "label": "Laptop",
-                "item": "laptop",
-                "op": "shell",
-                "args": ["xrandr -o normal",
-                         "xdg-screensaver resume $ROOTWINID || true",
-                         "$ENABLE_DEVICES", "$DISABLE_TOUCH || true",
-                         "$NOTIFY 'Laptop mode; disabled touchscreen'"],
-                "sensitive": true
-            },{
-                "label": "Tablet",
-                "item": "tablet",
-                "op": "shell",
-                "args": ["xrandr -o left",
-                         "xdg-screensaver suspend $ROOTWINID || true",
-                         "$ENABLE_DEVICES", "$DISABLE_NONTOUCH || true",
-                         "$ROTATE_TOUCH_LEFT || true",
-                         "$NOTIFY 'Tablet mode; touchscreen only'"],
-                "sensitive": true
-            },{
-                "label": "Tent",
-                "item": "tablet",
-                "op": "shell",
-                "args": ["xrandr -o inverted",
-                         "xdg-screensaver suspend $ROOTWINID || true",
-                         "$ENABLE_DEVICES", "$DISABLE_NONTOUCH || true",
-                         "$ROTATE_TOUCH_INVERTED || true",
-                         "$NOTIFY 'Tent mode; touchscreen only'"],
-                "sensitive": true
-            },{
-                "label": "Video",
-                "item": "tv",
-                "op": "shell",
-                "args": ["xrandr -o normal",
-                         "xdg-screensaver suspend $ROOTWINID || true",
-                         "$ENABLE_DEVICES", "$DISABLE_NONTOUCH || true",
-                         "$ROTATE_TOUCH_NORMAL || true",
-                         "$NOTIFY 'Video mode; touchscreen only'"],
-                "sensitive": true
-            },{
-                "label": "Everything",
-                "item": "tv",
-                "op": "shell",
-                "args": ["xrandr -o normal", "$ENABLE_DEVICES",
-                         "xdg-screensaver resume $ROOTWINID || true",
-                         "$NOTIFY 'All input devices enabled'"],
-                "sensitive": true
-            }
-        ]
+        "indicator": {
+            "icons": {"startup": "$ICON"},
+            "menu": [
+                {
+                    "label": "Laptop",
+                    "item": "laptop",
+                    "op": "shell",
+                    "args": ["xrandr -o normal",
+                             "xdg-screensaver resume $ROOTWINID || true",
+                             "$ENABLE_DEVICES", "$DISABLE_TOUCH || true",
+                             "$NOTIFY 'Laptop mode; disabled touchscreen'"],
+                    "sensitive": true
+                },{
+                    "label": "Tablet",
+                    "item": "tablet",
+                    "op": "shell",
+                    "args": ["xrandr -o left",
+                             "xdg-screensaver suspend $ROOTWINID || true",
+                             "$ENABLE_DEVICES", "$DISABLE_NONTOUCH || true",
+                             "$ROTATE_TOUCH_LEFT || true",
+                             "$NOTIFY 'Tablet mode; touchscreen only'"],
+                    "sensitive": true
+                },{
+                    "label": "Tent",
+                    "item": "tablet",
+                    "op": "shell",
+                    "args": ["xrandr -o inverted",
+                             "xdg-screensaver suspend $ROOTWINID || true",
+                             "$ENABLE_DEVICES", "$DISABLE_NONTOUCH || true",
+                             "$ROTATE_TOUCH_INVERTED || true",
+                             "$NOTIFY 'Tent mode; touchscreen only'"],
+                    "sensitive": true
+                },{
+                    "label": "Video",
+                    "item": "tv",
+                    "op": "shell",
+                    "args": ["xrandr -o normal",
+                             "xdg-screensaver suspend $ROOTWINID || true",
+                             "$ENABLE_DEVICES", "$DISABLE_NONTOUCH || true",
+                             "$ROTATE_TOUCH_NORMAL || true",
+                             "$NOTIFY 'Video mode; touchscreen only'"],
+                    "sensitive": true
+                },{
+                    "label": "Everything",
+                    "item": "tv",
+                    "op": "shell",
+                    "args": ["xrandr -o normal", "$ENABLE_DEVICES",
+                             "xdg-screensaver resume $ROOTWINID || true",
+                             "$NOTIFY 'All input devices enabled'"],
+                    "sensitive": true
+                }
+            ]
+        }
     }
     OK GO
 tac

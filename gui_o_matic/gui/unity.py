@@ -40,6 +40,7 @@ class UNUSED_UnityWebView():
 
 
 class UnityGUI(GtkBaseGUI):
+    _HAVE_INDICATOR = True
     _STATUS_MODES = {
         'startup': appindicator.STATUS_ACTIVE,
         'normal': appindicator.STATUS_ACTIVE,

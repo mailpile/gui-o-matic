@@ -10,6 +10,9 @@ from base import BaseGUI
 
 
 class GtkBaseGUI(BaseGUI):
+
+    _HAVE_INDICATOR = False
+
     def __init__(self, config):
         BaseGUI.__init__(self, config)
         if pynotify:
@@ -36,6 +39,123 @@ class GtkBaseGUI(BaseGUI):
         self.items[item] = menu_item
         self.menu.append(menu_item)
 
+    def _set_background_image(self, container, image):
+        themed_image = self._theme_image(image)
+        img = gtk.gdk.pixbuf_new_from_file(themed_image)
+        def draw_background(widget, ev):
+            alloc = widget.get_allocation()
+            pb = img.scale_simple(alloc.width, alloc.height,
+                                  gtk.gdk.INTERP_BILINEAR)
+            widget.window.draw_pixbuf(
+                widget.style.bg_gc[gtk.STATE_NORMAL],
+                pb, 0, 0, alloc.x, alloc.y)
+            if (hasattr(widget, 'get_child') and
+                    widget.get_child() is not None):
+                widget.propagate_expose(widget.get_child(), ev)
+            return False
+        container.connect('expose_event', draw_background)
+
+    def _main_window_add_actions(self, button_box):
+        for action in self.config['main_window'].get('actions', []):
+            if action.get('type', 'button') == 'button':
+                widget = gtk.Button(label=action.get('label', 'OK'))
+                event = "clicked"
+            else:
+                raise NotImplementedError('We only have buttons atm.')
+
+            if action.get('position', 'left') in ('left', 'top'):
+                button_box.pack_start(widget, False, True)
+            elif action['position'] in ('right', 'bottom'):
+                button_box.pack_end(widget, False, True)
+            else:
+                raise NotImplementedError('Invalid position: %s'
+                                          % action['position'])
+
+            if action.get('op'):
+                def activate(o, a):
+                    return lambda d: self._do(o, a)
+                widget.connect(event,
+                    activate(action['op'], action.get('args', [])))
+
+            widget.set_sensitive(action.get('sensitive', True))
+            self.items[action['item']] = widget
+
+    def _main_window_menubar(self, menu_container, icon_container):
+        if not self._HAVE_INDICATOR:
+            menubar = gtk.MenuBar()
+            im = gtk.MenuItem(self.config.get('app_name', 'GUI-o-Matic'))
+            im.set_submenu(self.menu)
+            menubar.append(im)
+            menu_container.pack_start(menubar, False, True)
+
+            # FIXME: Create indicator icon, put in the container and
+            #        wire things up so _indicator_set_icon() can do
+            #        its thing.
+
+    def _main_window_default_style(self):
+        wcfg = self.config['main_window']
+        vbox = gtk.VBox(False, 1)
+
+        # TODO: Allow user to configure alignment of message, padding?
+
+        lbl = gtk.Label()
+        lbl.set_markup(wcfg.get('message', ''))
+        lbl.set_alignment(0.5, 0.5)
+
+        if wcfg.get('image'):
+            self._set_background_image(vbox, wcfg.get('image'))
+
+        button_box = gtk.HBox(False, 1)
+        self._main_window_indicator(vbox, button_box)
+        self._main_window_add_actions(button_box)
+
+        vbox.pack_start(lbl, True, True)
+        vbox.pack_end(button_box, False, True)
+        self.main_window['window'].add(vbox)
+        self.main_window.update({
+            'vbox': vbox,
+            'label': lbl,
+            'buttons': button_box})
+
+    # TODO: Add other window styles?
+
+    def _main_window_setup(self, now=False):
+        def create(self):
+            wcfg = self.config['main_window']
+
+            window = gtk.Window(gtk.WINDOW_TOPLEVEL)
+            self.main_window = {'window': window}
+
+            if wcfg.get('style', 'default') == 'default':
+                self._main_window_default_style()
+            else:
+                raise NotImplementedError('We only have one style atm.')
+
+            if wcfg.get('close_quits'):
+                window.connect("delete_event", lambda a1,a2: gtk.main_quit())
+            else:
+                window.connect('delete-event', lambda w, e: w.hide() or True)
+            window.connect("destroy", lambda wid: gtk.main_quit())
+
+            window.set_title(self.config.get('app_name', 'gui-o-matic'))
+            window.set_decorated(True)
+            window.set_size_request(
+                wcfg.get('width', 360), wcfg.get('height',360))
+            if wcfg.get('show'):
+                window.show_all()
+
+        if now:
+            create(self)
+        else:
+            gobject.idle_add(create, self)
+
+    def quit(self):
+        gtk.main_quit()
+
+    def show_main_window(self):
+        if self.main_window:
+            self.main_window['window'].show_all()
+
     def update_splash_screen(self, progress=None, message=None):
         if self.splash:
             if message is not None and 'message' in self.splash:
@@ -59,20 +179,7 @@ class GtkBaseGUI(BaseGUI):
                 lbl = None
 
             if image:
-                themed_image = self._theme_image(image)
-                img = gtk.gdk.pixbuf_new_from_file(themed_image)
-                def draw_background(widget, ev):
-                    alloc = widget.get_allocation()
-                    pb = img.scale_simple(alloc.width, alloc.height,
-                                          gtk.gdk.INTERP_BILINEAR)
-                    widget.window.draw_pixbuf(
-                        widget.style.bg_gc[gtk.STATE_NORMAL],
-                        pb, 0, 0, alloc.x, alloc.y)
-                    if (hasattr(widget, 'get_child') and
-                            widget.get_child() is not None):
-                        widget.propagate_expose(widget.get_child(), ev)
-                    return False
-                vbox.connect('expose_event', draw_background)
+                self._set_background_image(vbox, image)
 
             if progress_bar:
                 pbar = gtk.ProgressBar()
@@ -114,8 +221,9 @@ class GtkBaseGUI(BaseGUI):
     def _get_webview(self):
         if not self._webview:
             try:
+                # FIXME: This is broken
                 self._webview = UnityWebView(self)
-            except ImportError:
+            except (ImportError, NameError):
                 pass
         return self._webview
 
@@ -132,10 +240,11 @@ class GtkBaseGUI(BaseGUI):
     def _indicator_setup(self):
         pass
 
-    def _indicator_set_icon(self, icon):
+    def _indicator_set_icon(self, icon, **kwargs):
+        # FIXME: Update an icon in the main window instead.
         pass
 
-    def _indicator_set_status(self, status):
+    def _indicator_set_status(self, status, **kwargs):
         pass
 
     def set_status(self, status='startup', now=False):
@@ -143,25 +252,30 @@ class GtkBaseGUI(BaseGUI):
             do = lambda o, a: o(a)
         else:
             do = gobject.idle_add
-        if 'indicator_icons' in self.config:
-            icon = self.config['indicator_icons'].get(status)
+        icons = self.config.get('indicator', {}).get('icons')
+        if icons:
+            icon = icons.get(status)
             if not icon:
-                icon = self.config['indicator_icons'].get('normal')
+                icon = icons.get('normal')
             if icon:
                 self._indicator_set_icon(icon, do=do)
         self._indicator_set_status(status, do=do)
 
-    def set_menu_label(self, item=None, label=None):
+    def set_item_label(self, item=None, label=None):
         if item and item in self.items:
             gobject.idle_add(self.items[item].set_label, label)
 
-    def set_menu_sensitive(self, item=None, sensitive=True):
+    def set_item_sensitive(self, item=None, sensitive=True):
         if item and item in self.items:
             gobject.idle_add(self.items[item].set_sensitive, sensitive)
 
     def run(self):
         self._menu_setup()
-        self._indicator_setup()
+        if self.config.get('indicator') and self._HAVE_INDICATOR:
+            self._indicator_setup()
+        if self.config.get('main_window'):
+            self._main_window_setup()
+
         self.ready = True
         try:
             gtk.main()

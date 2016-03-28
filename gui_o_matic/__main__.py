@@ -35,6 +35,8 @@ class StdinWatcher(threading.Thread):
                     self.do(cmd, args)
                 except (ValueError, IndexError, NameError):
                     traceback.print_exc()
+        except KeyboardInterrupt:
+            return
         except:
             traceback.print_exc()
         finally:
