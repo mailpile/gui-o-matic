@@ -76,7 +76,8 @@ class BaseGUI(object):
             stderr=subprocess.PIPE)
 
     def _theme_image(self, pathname):
-        return pathname.replace('%(theme)s', self.ICON_THEME)
+        p = pathname.replace('%(theme)s', self.ICON_THEME)
+        return os.path.abspath(p)
 
     def _add_menu_item(self, item='item', label='Menu item', sensitive=False,
                              op=None, args=None, **ignored_kwargs):

@@ -5,7 +5,7 @@ import appindicator
 import gobject
 import gtk
 
-from gtkbase import GtkBaseGUI
+from gui_o_matic.gui.gtkbase import GtkBaseGUI
 
 
 class UNUSED_UnityWebView():

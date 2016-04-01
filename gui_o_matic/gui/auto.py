@@ -1,5 +1,6 @@
 import copy
 
+
 def AutoGUI(config, *args, **kwargs):
     """
     Load and instanciate the best GUI available for this machine.

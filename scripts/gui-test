@@ -30,6 +30,14 @@ export PARPID=$$
                 "args": {"command": "screen -x -r mailpile || screen"},
                 "sensitive": true
             },{
+                "position": "left",
+                "type": "checkbox",
+                "label": "Enable World Peace",
+                "item": "ewp",
+                "op": "shell",
+                "args": ["echo woop woop"],
+                "sensitive": true
+            },{
                 "position": "right",
                 "label": "Quit",
                 "item": "quit",

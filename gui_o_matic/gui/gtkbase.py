@@ -6,7 +6,7 @@ try:
 except ImportError:
     pynotify = None
 
-from base import BaseGUI
+from gui_o_matic.gui.base import BaseGUI
 
 
 class GtkBaseGUI(BaseGUI):
@@ -60,6 +60,9 @@ class GtkBaseGUI(BaseGUI):
             if action.get('type', 'button') == 'button':
                 widget = gtk.Button(label=action.get('label', 'OK'))
                 event = "clicked"
+            elif action['type'] == 'checkbox':
+                widget = gtk.CheckButton(label=action.get('label', '?'))
+                event = "toggled"
             else:
                 raise NotImplementedError('We only have buttons atm.')
 
@@ -80,7 +83,7 @@ class GtkBaseGUI(BaseGUI):
             widget.set_sensitive(action.get('sensitive', True))
             self.items[action['item']] = widget
 
-    def _main_window_menubar(self, menu_container, icon_container):
+    def _main_window_indicator(self, menu_container, icon_container):
         if not self._HAVE_INDICATOR:
             menubar = gtk.MenuBar()
             im = gtk.MenuItem(self.config.get('app_name', 'GUI-o-Matic'))
@@ -88,13 +91,14 @@ class GtkBaseGUI(BaseGUI):
             menubar.append(im)
             menu_container.pack_start(menubar, False, True)
 
-            # FIXME: Create indicator icon, put in the container and
-            #        wire things up so _indicator_set_icon() can do
-            #        its thing.
+            icon = gtk.Image()
+            icon_container.pack_start(icon, False, True)
+            self.main_window['indicator_icon'] = icon
 
     def _main_window_default_style(self):
         wcfg = self.config['main_window']
-        vbox = gtk.VBox(False, 1)
+        vbox = gtk.VBox(False, 5)
+        vbox.set_border_width(5)
 
         # TODO: Allow user to configure alignment of message, padding?
 
@@ -105,12 +109,13 @@ class GtkBaseGUI(BaseGUI):
         if wcfg.get('image'):
             self._set_background_image(vbox, wcfg.get('image'))
 
-        button_box = gtk.HBox(False, 1)
+        button_box = gtk.HBox(False, 5)
+
         self._main_window_indicator(vbox, button_box)
         self._main_window_add_actions(button_box)
-
         vbox.pack_start(lbl, True, True)
         vbox.pack_end(button_box, False, True)
+
         self.main_window['window'].add(vbox)
         self.main_window.update({
             'vbox': vbox,
@@ -139,6 +144,8 @@ class GtkBaseGUI(BaseGUI):
 
             window.set_title(self.config.get('app_name', 'gui-o-matic'))
             window.set_decorated(True)
+            if wcfg.get('center', False):
+                window.set_position(gtk.WIN_POS_CENTER)
             window.set_size_request(
                 wcfg.get('width', 360), wcfg.get('height',360))
             if wcfg.get('show'):
@@ -200,8 +207,7 @@ class GtkBaseGUI(BaseGUI):
                 'window': window,
                 'vbox': vbox,
                 'message': lbl,
-                'progress': pbar
-            }
+                'progress': pbar}
         if now:
             show(self)
         else:
@@ -241,8 +247,11 @@ class GtkBaseGUI(BaseGUI):
         pass
 
     def _indicator_set_icon(self, icon, **kwargs):
-        # FIXME: Update an icon in the main window instead.
-        pass
+        if 'indicator_icon' in self.main_window:
+            themed_icon = self._theme_image(icon)
+            img = gtk.gdk.pixbuf_new_from_file(themed_icon)
+            img = img.scale_simple(32, 32, gtk.gdk.INTERP_BILINEAR)
+            self.main_window['indicator_icon'].set_from_pixbuf(img)
 
     def _indicator_set_status(self, status, **kwargs):
         pass

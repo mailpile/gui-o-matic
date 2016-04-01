@@ -1,6 +1,3 @@
-# This is a general-purpose GUI which can be configured and controlled
-# using a very simple line-based (JSON) protocol.
-#
 import objc
 import traceback
 
@@ -8,7 +5,7 @@ from Foundation import *
 from AppKit import *
 from PyObjCTools import AppHelper
 
-from base import BaseGUI
+from gui_o_matic.gui.base import BaseGUI
 
 
 class MacOSXThing(NSObject):
