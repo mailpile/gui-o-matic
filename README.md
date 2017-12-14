@@ -74,7 +74,7 @@ Planned features:
 
    * Dock icon with mutable icon and custom menu
    * System notifications (growl-style)
-   * OAuth2 login-flow for authenticating with worker
+   * Prompt the user for a password?
 
 The UI feature-set is deliberately meant to stay small, to increase the
 odds that the full functionality can be made available on all platforms.
