@@ -82,7 +82,14 @@ export ROTATE_TOUCH_INVERTED="$DEV_TOUCH |xargs -L 1 -I DEV xinput set-prop DEV 
 tac
 ) | (
     onboard &
+    OBPID=$!
+    function cleanup {
+      kill $OBPID
+    }
+    trap cleanup EXIT
+
     cd "$BASEDIR/.."
-    python -m gui_o_matic
+    python2 -m gui_o_matic
+
     kill $PARPID
 )

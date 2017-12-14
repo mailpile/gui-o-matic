@@ -8,6 +8,11 @@ from gui_o_matic.gui.auto import AutoGUI
 
 
 class GUIPipeControl(threading.Thread):
+    OK_GO = 'OK GO'
+    OK_LISTEN = 'OK LISTEN'
+    OK_LISTEN_TO = 'OK LISTEN TO:'
+    PIVOT_TO = 'PIVOT TO:'
+
     def __init__(self, fd, config=None, gui_object=None):
         threading.Thread.__init__(self)
         self.daemon = True
@@ -15,6 +20,14 @@ class GUIPipeControl(threading.Thread):
         self.gui = gui_object
         self.fd = fd
         self.child = None
+
+    def shell_pivot(self, command):
+        self.child = subprocess.Popen(command,
+            shell=True,
+            close_fds=True,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE)
+        self.fd = self.child.stdout
 
     def bootstrap(self):
         assert(self.config is None)
@@ -24,18 +37,17 @@ class GUIPipeControl(threading.Thread):
         config = []
         while True:
             line = self.fd.readline()
-            if not line or line.strip() in ('OK LISTEN', 'OK GO'):
-                listen = 'LISTEN' in line
+            if not line or line.strip() in (self.OK_GO, self.OK_LISTEN):
+                listen = self.OK_LISTEN in line
                 break
 
-            elif line.startswith('SHELL '):
-                command = line[5:].strip()
-                self.child = subprocess.Popen(command,
-                    shell=True,
-                    close_fds=True,
-                    stdin=subprocess.PIPE,
-                    stdout=subprocess.PIPE)
-                self.fd = self.child.stdout
+            elif line.startswith(self.OK_LISTEN_TO):
+                self.shell_pivot(line[len(self.OK_LISTEN_TO):].strip())
+                listen = True
+                break
+
+            elif line.startswith(self.PIVOT_TO):
+                self.shell_pivot(line[len(self.PIVOT_TO):].strip())
 
             else:
                 config.append(line.strip())
