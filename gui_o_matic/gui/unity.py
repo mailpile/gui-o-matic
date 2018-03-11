@@ -8,37 +8,6 @@ import gtk
 from gui_o_matic.gui.gtkbase import GtkBaseGUI
 
 
-class UNUSED_UnityWebView():
-    def __init__(self, mpi):
-        import webkit
-        self.webview = webkit.WebView()
-
-        self.scroller = gtk.ScrolledWindow()
-        self.scroller.add(self.webview)
-
-        self.vbox = gtk.VBox(False, 1)
-        self.vbox.pack_start(self.scroller, True, True)
-
-        self.window = gtk.Window(gtk.WINDOW_TOPLEVEL)
-        self.window.set_size_request(1100, 600)
-        self.window.connect('delete-event', lambda w, e: w.hide() or True)
-        self.window.add(self.vbox)
-
-        self.browser_settings = self.webview.get_settings()
-        self.browser_settings.set_property("enable-java-applet", False)
-        self.browser_settings.set_property("enable-plugins", False)
-        self.browser_settings.set_property("enable-scripts", True)
-        self.browser_settings.set_property("enable-private-browsing", True)
-        self.browser_settings.set_property("enable-spell-checking", True)
-        self.browser_settings.set_property("enable-developer-extras", True)
-        self.webview.set_settings(self.browser_settings)
-
-    def show_url(self, url):
-        self.webview.open('about:blank')  # Clear page while loading
-        self.webview.open(url)
-        self.window.show_all()
-
-
 class UnityGUI(GtkBaseGUI):
     _HAVE_INDICATOR = True
     _STATUS_MODES = {
