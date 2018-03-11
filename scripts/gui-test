@@ -16,21 +16,21 @@ export PARPID=$$
         "image": "$BASEDIR/img/gt-wallpaper.png",
         "actions": [
             {
-                "position": "left",
+                "position": "first",
                 "label": "XKCD",
                 "item": "btn-xkcd",
                 "op": "show_url",
                 "args": ["https://xkcd.com/"],
                 "sensitive": false
             },{
-                "position": "left",
+                "position": "first",
                 "label": "Mailpile?",
                 "item": "mp",
                 "op": "terminal",
                 "args": {"command": "screen -x -r mailpile || screen"},
                 "sensitive": true
             },{
-                "position": "left",
+                "position": "first",
                 "type": "checkbox",
                 "label": "Enable World Peace",
                 "item": "ewp",
@@ -38,7 +38,7 @@ export PARPID=$$
                 "args": ["echo woop woop"],
                 "sensitive": true
             },{
-                "position": "right",
+                "position": "last",
                 "label": "Quit",
                 "item": "quit",
                 "op": "quit",
@@ -106,7 +106,4 @@ echo 'set_status {"status": "shutdown"}'
 
 sleep 5
 
-) | (
-    python -m gui_o_matic
-    kill $PARPID
-)
+) | exec python -m gui_o_matic
