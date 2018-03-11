@@ -5,6 +5,7 @@ import socket
 import time
 import threading
 import traceback
+import urllib2
 from gui_o_matic.gui.auto import AutoGUI
 
 
@@ -13,8 +14,7 @@ class GUIPipeControl(threading.Thread):
     OK_LISTEN = 'OK LISTEN'
     OK_LISTEN_TO = 'OK LISTEN TO:'
     OK_LISTEN_TCP = 'OK LISTEN TCP:'
-    PIVOT_TCP = 'PIVOT TCP:'
-    PIVOT_TO = 'PIVOT TO:'
+    OK_LISTEN_HTTP = 'OK LISTEN HTTP:'
 
     def __init__(self, fd, config=None, gui_object=None):
         threading.Thread.__init__(self)
@@ -41,6 +41,39 @@ class GUIPipeControl(threading.Thread):
         self.shell_pivot(command.replace('%PORT%', port))
         self.fd = self.listening.accept()[0].makefile()
 
+    def http_tcp_pivot(self, url):
+        self.listening = socket.socket()
+        self.listening.bind(('127.0.0.1', 0))
+        self.listening.listen(0)
+        port = str(self.listening.getsockname()[1])
+        urllib2.urlopen(url.replace('%PORT%', port)).read()
+        self.fd = self.listening.accept()[0].makefile()
+
+    def do_line_magic(self, line, listen):
+        try:
+            if not line or line.strip() in (self.OK_GO, self.OK_LISTEN):
+                return True, self.OK_LISTEN in line
+
+            elif line.startswith(self.OK_LISTEN_TO):
+                self.shell_pivot(line[len(self.OK_LISTEN_TO):].strip())
+                return True, True
+
+            elif line.startswith(self.OK_LISTEN_TCP):
+                self.shell_tcp_pivot(line[len(self.OK_LISTEN_TCP):].strip())
+                return True, True
+
+            elif line.startswith(self.OK_LISTEN_HTTP):
+                self.http_tcp_pivot(line[len(self.OK_LISTEN_HTTP):].strip())
+                return True, True
+
+            else:
+                return False, listen
+        except Exception, e:
+            if self.gui:
+                self.gui.report_error(e)
+                time.sleep(30)
+                raise
+
     def bootstrap(self):
         assert(self.config is None)
         assert(self.gui is None)
@@ -50,26 +83,9 @@ class GUIPipeControl(threading.Thread):
         while True:
             line = self.fd.readline()
 
-            if not line or line.strip() in (self.OK_GO, self.OK_LISTEN):
-                listen = self.OK_LISTEN in line
+            match, listen = self.do_line_magic(line, listen)
+            if match:
                 break
-
-            elif line.startswith(self.OK_LISTEN_TO):
-                self.shell_pivot(line[len(self.OK_LISTEN_TO):].strip())
-                listen = True
-                break
-
-            elif line.startswith(self.OK_LISTEN_TCP):
-                self.shell_tcp_pivot(line[len(self.OK_LISTEN_TCP):].strip())
-                listen = True
-                break
-
-            elif line.startswith(self.PIVOT_TCP):
-                self.shell_tcp_pivot(line[len(self.PIVOT_TCP):].strip())
-
-            elif line.startswith(self.PIVOT_TO):
-                self.shell_pivot(line[len(self.PIVOT_TO):].strip())
-
             else:
                 config.append(line.strip())
 
@@ -102,12 +118,19 @@ class GUIPipeControl(threading.Thread):
                     else:
                         break
                 if line:
-                    try:
-                        cmd, args = line.strip().split(' ', 1)
-                        args = json.loads(args)
-                        self.do(cmd, args)
-                    except (ValueError, IndexError, NameError):
-                        traceback.print_exc()
+                    match, brk, lstn = self.do_line_magic(line, None)
+                    if not match:
+                        try:
+                            cmd, args = line.strip().split(' ', 1)
+                            args = json.loads(args)
+                            self.do(cmd, args)
+                        except (ValueError, IndexError, NameError), e:
+                            if self.gui:
+                                self.gui.report_error(e)
+                                time.sleep(30)
+                            else:
+                                traceback.print_exc()
+
         except KeyboardInterrupt:
             return
         except:
