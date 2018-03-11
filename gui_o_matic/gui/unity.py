@@ -23,7 +23,7 @@ class UnityGUI(GtkBaseGUI):
             self.config.get('app_name', 'gui-o-matic').lower() + "-indicator",
             # FIXME: Make these two configurable...
             "indicator-messages", appindicator.CATEGORY_COMMUNICATIONS)
-        self.set_status('startup', now=True)
+        self.set_status('startup', _now=True)
         self.ind.set_menu(self.menu)
 
     def _indicator_set_icon(self, icon, do=gobject.idle_add):

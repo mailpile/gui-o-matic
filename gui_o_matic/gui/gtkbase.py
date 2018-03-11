@@ -1,5 +1,6 @@
 import gobject
 import gtk
+import threading
 import traceback
 try:
     import pynotify
@@ -15,10 +16,10 @@ class GtkBaseGUI(BaseGUI):
 
     def __init__(self, config):
         BaseGUI.__init__(self, config)
+        self.splash = None
         if pynotify:
             pynotify.init(config.get('app_name', 'gui-o-matic'))
         gobject.threads_init()
-        self.splash = None
 
     def _menu_setup(self):
         self.items = {}
@@ -62,13 +63,15 @@ class GtkBaseGUI(BaseGUI):
                 event = "clicked"
             elif action['type'] == 'checkbox':
                 widget = gtk.CheckButton(label=action.get('label', '?'))
+                if action.get('checked'):
+                    widget.set_active(True)
                 event = "toggled"
             else:
                 raise NotImplementedError('We only have buttons atm.')
 
-            if action.get('position', 'left') in ('left', 'top'):
+            if action.get('position', 'left') in ('first', 'left', 'top'):
                 button_box.pack_start(widget, False, True)
-            elif action['position'] in ('right', 'bottom'):
+            elif action['position'] in ('last', 'right', 'bottom'):
                 button_box.pack_end(widget, False, True)
             else:
                 raise NotImplementedError('Invalid position: %s'
@@ -104,7 +107,9 @@ class GtkBaseGUI(BaseGUI):
 
         lbl = gtk.Label()
         lbl.set_markup(wcfg.get('message', ''))
-        lbl.set_alignment(0.5, 0.5)
+        lbl.set_alignment(
+            wcfg.get('message_x', 0.5),
+            wcfg.get('message_y', 0.5))
 
         if wcfg.get('image'):
             self._set_background_image(vbox, wcfg.get('image'))
@@ -124,7 +129,7 @@ class GtkBaseGUI(BaseGUI):
 
     # TODO: Add other window styles?
 
-    def _main_window_setup(self, now=False):
+    def _main_window_setup(self, _now=False):
         def create(self):
             wcfg = self.config['main_window']
 
@@ -151,36 +156,49 @@ class GtkBaseGUI(BaseGUI):
             if wcfg.get('show'):
                 window.show_all()
 
-        if now:
+        if _now:
             create(self)
         else:
             gobject.idle_add(create, self)
 
     def quit(self):
-        gtk.main_quit()
+        def q(self):
+            gtk.main_quit()
+        gobject.idle_add(q, self)
 
     def show_main_window(self):
-        if self.main_window:
-            self.main_window['window'].show_all()
+        def show(self):
+            if self.main_window:
+                self.main_window['window'].show_all()
+        gobject.idle_add(show, self)
 
-    def update_splash_screen(self, progress=None, message=None):
-        if self.splash:
-            if message is not None and 'message' in self.splash:
-                self.splash['message'].set_markup(message)
-            if progress is not None and 'progress' in self.splash:
-                self.splash['progress'].set_fraction(progress)
+    def update_splash_screen(self, progress=None, message=None, _now=False):
+        def update(self):
+            if self.splash:
+                if message is not None and 'message' in self.splash:
+                    self.splash['message'].set_markup(message)
+                if progress is not None and 'progress' in self.splash:
+                    self.splash['progress'].set_fraction(progress)
+        if _now:
+            update(self)
+        else:
+            gobject.idle_add(update, self)
 
     def show_splash_screen(self, height=None, width=None,
                            progress_bar=False, image=None, message=None,
-                           now=False):
+                           message_x=0.5, message_y=0.5,
+                           _now=False):
+        wait_lock = threading.Lock()
         def show(self):
+            self.hide_splash_screen(_now=True)
+
             window = gtk.Window(gtk.WINDOW_TOPLEVEL)
             vbox = gtk.VBox(False, 1)
 
             if message:
                 lbl = gtk.Label()
                 lbl.set_markup(message or '')
-                lbl.set_alignment(0.5, 0.5)
+                lbl.set_alignment(message_x, message_y)
                 vbox.pack_start(lbl, True, True)
             else:
                 lbl = None
@@ -202,27 +220,35 @@ class GtkBaseGUI(BaseGUI):
             window.add(vbox)
             window.show_all()
 
-            self.hide_splash_screen(now=True)
             self.splash = {
                 'window': window,
+                'message_x': message_x,
+                'message_y': message_y,
                 'vbox': vbox,
                 'message': lbl,
                 'progress': pbar}
-        if now:
-            show(self)
-        else:
-            gobject.idle_add(show, self)
+            wait_lock.release()
+        with wait_lock:
+            if _now:
+                show(self)
+            else:
+                gobject.idle_add(show, self)
+            wait_lock.acquire()
 
-    def hide_splash_screen(self, now=False):
+    def hide_splash_screen(self, _now=False):
+        wait_lock = threading.Lock()
         def hide(self):
             for k in self.splash or []:
                 if self.splash[k] is not None:
                     self.splash[k].destroy()
             self.splash = None
-        if now:
-            hide(self)
-        else:
-            gobject.idle_add(hide, self)
+            wait_lock.release()
+        with wait_lock:
+            if _now:
+                hide(self)
+            else:
+                gobject.idle_add(hide, self)
+            wait_lock.acquire()
 
     def _get_webview(self):
         if not self._webview:
@@ -233,15 +259,23 @@ class GtkBaseGUI(BaseGUI):
                 pass
         return self._webview
 
-    def notify_user(self, message='Hello'):
-        if pynotify:
-            notification = pynotify.Notification(
-                self.config.get('app_name', 'gui-o-matic'),
-                message, "dialog-warning")
-            notification.set_urgency(pynotify.URGENCY_NORMAL)
-            notification.show()
-        else:
-            print('FIXME: Notify: %s' % message)
+    def notify_user(self, message='Hello', popup=False):
+        def notify(self):
+            if popup and pynotify:
+                notification = pynotify.Notification(
+                    self.config.get('app_name', 'gui-o-matic'),
+                    message, "dialog-warning")
+                notification.set_urgency(pynotify.URGENCY_NORMAL)
+                notification.show()
+            elif popup:
+                print('FIXME: Notify: %s' % message)
+            elif self.splash:
+                self.update_splash_screen(message=message, _now=True)
+            elif self.main_window:
+                self.main_window['label'].set_markup(message)
+            else:
+                print('FIXME: Notify: %s' % message)
+        gobject.idle_add(notify, self)
 
     def _indicator_setup(self):
         pass
@@ -256,8 +290,8 @@ class GtkBaseGUI(BaseGUI):
     def _indicator_set_status(self, status, **kwargs):
         pass
 
-    def set_status(self, status='startup', now=False):
-        if now:
+    def set_status(self, status='startup', _now=False):
+        if _now:
             do = lambda o, a: o(a)
         else:
             do = gobject.idle_add
@@ -285,7 +319,10 @@ class GtkBaseGUI(BaseGUI):
         if self.config.get('main_window'):
             self._main_window_setup()
 
-        self.ready = True
+        def ready(s):
+            s.ready = True
+        gobject.idle_add(ready, self)
+
         try:
             gtk.main()
         except:

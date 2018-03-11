@@ -18,49 +18,50 @@ class BaseGUI(object):
     def __init__(self, config):
         self.config = config
         self.ready = False
+        self.next_error_message = None
         self._webview = None
 
     def _do(self, op, args):
         op, args = op.lower(), copy.copy(args)
+        try:
+            if op == 'show_url':
+                self.show_url(url=args[0])
 
-        if op == 'show_url':
-            self.show_url(url=args[0])
+            elif op in ('get_url', 'post_url'):
+                url = args.pop(0)
+                base_url = '/'.join(url.split('/')[:3])
 
-        elif op in ('get_url', 'post_url'):
-            url = args.pop(0)
-            base_url = '/'.join(url.split('/')[:3])
+                uo = urllib.URLopener()
+                for cookie, value in self.config.get('http_cookies', {}
+                                                     ).get(base_url, []):
+                    uo.addheader('Cookie', '%s=%s' % (cookie, value))
 
-            uo = urllib.URLopener()
-            for cookie, value in self.config.get('http_cookies', {}
-                                                 ).get(base_url, []):
-                uo.addheader('Cookie', '%s=%s' % (cookie, value))
+                if op == 'post_url':
+                    (fn, hdrs) = uo.retrieve(url, data=args)
+                else:
+                    (fn, hdrs) = uo.retrieve(url)
+                hdrs = unicode(hdrs)
 
-            if op == 'post_url':
-                (fn, hdrs) = uo.retrieve(url, data=args)
-            else:
-                (fn, hdrs) = uo.retrieve(url)
-            hdrs = unicode(hdrs)
+                with open(fn, 'rb') as fd:
+                    data = fd.read().strip()
 
-            with open(fn, 'rb') as fd:
-                data = fd.read().strip()
+                if data.startswith('{') and 'application/json' in hdrs:
+                    data = json.loads(data)
+                    if 'message' in data:
+                        self.notify_user(data['message'])
 
-            if data.startswith('{') and 'application/json' in hdrs:
-                data = json.loads(data)
-                if 'message' in data:
-                    self.notify_user(data['message'])
-
-        elif op == "shell":
-            try:
+            elif op == "shell":
                 for arg in args:
                     rv = os.system(arg)
                     if 0 != rv:
                         raise OSError(
                             'Failed with exit code %d: %s' % (rv, arg))
-            except:
-                traceback.print_exc()
 
-        elif hasattr(self, op):
-            getattr(self, op)(**(args or {}))
+            elif hasattr(self, op):
+                getattr(self, op)(**(args or {}))
+
+        except Exception, e:
+            self.report_error(e)
 
     def terminal(self, command='/bin/bash', title=None, icon=None):
         cmd = [
@@ -69,11 +70,14 @@ class BaseGUI(object):
             "-e", command]
         if icon:
             cmd += ["-n", icon]
-        subprocess.Popen(cmd,
-            close_fds=True,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE)
+        try:
+            subprocess.Popen(cmd,
+                close_fds=True,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE)
+        except Exception, e:
+            self.report_error(e)
 
     def _theme_image(self, pathname):
         p = pathname.replace('%(theme)s', self.ICON_THEME)
@@ -103,8 +107,12 @@ class BaseGUI(object):
     def update_splash_screen(self, message=None, progress=None):
         pass
 
+    def set_next_error_message(self, message=None):
+        self.next_error_message = message
+
     def show_splash_screen(self, height=None, width=None,
-                           progress_bar=False, image=None, message=None):
+                           progress_bar=False, image=None,
+                           message=None, message_x=0.5, message_y=0.5):
         pass
 
     def _get_webview(self):
@@ -112,11 +120,20 @@ class BaseGUI(object):
 
     def show_url(self, url=None):
         assert(url is not None)
-        if not self.config.get('external_browser'):
-            webview = self._get_webview()
-            if webview:
-                return webview.show_url(url)
-        webbrowser.open(url)
+        try:
+            if not self.config.get('external_browser'):
+                webview = self._get_webview()
+                if webview:
+                    return webview.show_url(url)
+            webbrowser.open(url)
+        except Exception, e:
+            self.report_error(e)
+
+    def report_error(self, e):
+        traceback.print_exc()
+        self.notify_user(
+                (self.next_error_message or 'Error: %(error)s')
+                % {'error': unicode(e)})
 
     def hide_splash_screen(self):
         pass
