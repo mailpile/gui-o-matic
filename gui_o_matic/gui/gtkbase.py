@@ -142,7 +142,7 @@ class GtkBaseGUI(BaseGUI):
                 raise NotImplementedError('We only have one style atm.')
 
             if wcfg.get('close_quits'):
-                window.connect("delete_event", lambda a1,a2: gtk.main_quit())
+                window.connect('delete-event', lambda w, e: gtk.main_quit())
             else:
                 window.connect('delete-event', lambda w, e: w.hide() or True)
             window.connect("destroy", lambda wid: gtk.main_quit())
@@ -239,7 +239,7 @@ class GtkBaseGUI(BaseGUI):
         wait_lock = threading.Lock()
         def hide(self):
             for k in self.splash or []:
-                if self.splash[k] is not None:
+                if hasattr(self.splash[k], 'destroy'):
                     self.splash[k].destroy()
             self.splash = None
             wait_lock.release()

@@ -21,6 +21,7 @@ class GUIPipeControl(threading.Thread):
         self.daemon = True
         self.config = config
         self.gui = gui_object
+        self.sock = None
         self.fd = fd
         self.child = None
         self.listening = None
@@ -33,21 +34,37 @@ class GUIPipeControl(threading.Thread):
             stdout=subprocess.PIPE)
         self.fd = self.child.stdout
 
-    def shell_tcp_pivot(self, command):
+    def _listen(self):
         self.listening = socket.socket()
         self.listening.bind(('127.0.0.1', 0))
         self.listening.listen(0)
-        port = str(self.listening.getsockname()[1])
+        return str(self.listening.getsockname()[1])
+
+    def _accept(self):
+        if self.child is not None:
+            self.listening.settimeout(1)
+            for count in range(0, 60):
+                try:
+                    self.sock = self.listening.accept()[0]
+                    self.fd = self.sock.makefile()
+                    return
+                except socket.timeout:
+                    if self.child.poll() is not None:
+                        raise
+        else:
+            self.listening.settimeout(60)
+            self.sock = self.listening.accept()[0]
+            self.fd = self.sock.makefile()
+
+    def shell_tcp_pivot(self, command):
+        port = self._listen()
         self.shell_pivot(command.replace('%PORT%', port))
-        self.fd = self.listening.accept()[0].makefile()
+        self._accept()
 
     def http_tcp_pivot(self, url):
-        self.listening = socket.socket()
-        self.listening.bind(('127.0.0.1', 0))
-        self.listening.listen(0)
-        port = str(self.listening.getsockname()[1])
+        port = self._listen()
         urllib2.urlopen(url.replace('%PORT%', port)).read()
-        self.fd = self.listening.accept()[0].makefile()
+        self._accept()
 
     def do_line_magic(self, line, listen):
         try:
@@ -113,10 +130,7 @@ class GUIPipeControl(threading.Thread):
                     line = None
 
                 if not line:
-                    if self.listening:
-                        self.fd = self.listening.accept()[0].makefile()
-                    else:
-                        break
+                    break
                 if line:
                     match, brk, lstn = self.do_line_magic(line, None)
                     if not match:
