@@ -26,19 +26,24 @@ class GtkBaseGUI(BaseGUI):
         self.menu = gtk.Menu()
         self._create_menu_from_config()
 
-    def _add_menu_item(self, item='item', label='Menu item',
+    def _add_menu_item(self, item=None, label='Menu item',
                              sensitive=False,
+                             separator=False,
                              op=None, args=None,
                              **ignored_kwarg):
-        menu_item = gtk.MenuItem(label)
-        menu_item.set_sensitive(sensitive)
-        if op:
-            def activate(o, a):
-                return lambda d: self._do(o, a)
-            menu_item.connect("activate", activate(op, args or []))
+        if separator:
+            menu_item = gtk.SeparatorMenuItem()
+        else:
+            menu_item = gtk.MenuItem(label)
+            menu_item.set_sensitive(sensitive)
+            if op:
+                def activate(o, a):
+                    return lambda d: self._do(o, a)
+                menu_item.connect("activate", activate(op, args or []))
         menu_item.show()
-        self.items[item] = menu_item
         self.menu.append(menu_item)
+        if item:
+            self.items[item] = menu_item
 
     def _set_background_image(self, container, image):
         themed_image = self._theme_image(image)
@@ -107,9 +112,7 @@ class GtkBaseGUI(BaseGUI):
 
         lbl = gtk.Label()
         lbl.set_markup(wcfg.get('message', ''))
-        lbl.set_alignment(
-            wcfg.get('message_x', 0.5),
-            wcfg.get('message_y', 0.5))
+        lbl.set_alignment(0.0, 0.5)
 
         if wcfg.get('image'):
             self._set_background_image(vbox, wcfg.get('image'))
@@ -172,11 +175,18 @@ class GtkBaseGUI(BaseGUI):
                 self.main_window['window'].show_all()
         gobject.idle_add(show, self)
 
+    def hide_main_window(self):
+        def hide(self):
+            if self.main_window:
+                self.main_window['window'].hide()
+        gobject.idle_add(hide, self)
+
     def update_splash_screen(self, progress=None, message=None, _now=False):
         def update(self):
             if self.splash:
                 if message is not None and 'message' in self.splash:
-                    self.splash['message'].set_markup(message)
+                    self.splash['message'].set_markup(
+                        message.replace('<', '&lt;'))
                 if progress is not None and 'progress' in self.splash:
                     self.splash['progress'].set_fraction(progress)
         if _now:
@@ -250,17 +260,10 @@ class GtkBaseGUI(BaseGUI):
                 gobject.idle_add(hide, self)
             wait_lock.acquire()
 
-    def _get_webview(self):
-        if not self._webview:
-            try:
-                # FIXME: This is broken
-                self._webview = UnityWebView(self)
-            except (ImportError, NameError):
-                pass
-        return self._webview
-
     def notify_user(self, message='Hello', popup=False):
         def notify(self):
+            if 'status' in self.items:
+                self.items['status'].set_label(message)
             if popup and pynotify:
                 notification = pynotify.Notification(
                     self.config.get('app_name', 'gui-o-matic'),
@@ -272,7 +275,8 @@ class GtkBaseGUI(BaseGUI):
             elif self.splash:
                 self.update_splash_screen(message=message, _now=True)
             elif self.main_window:
-                self.main_window['label'].set_markup(message)
+                self.main_window['label'].set_markup(
+                    message.replace('<', '&lt;'))
             else:
                 print('FIXME: Notify: %s' % message)
         gobject.idle_add(notify, self)

@@ -87,7 +87,7 @@ class GUIPipeControl(threading.Thread):
                 return False, listen
         except Exception, e:
             if self.gui:
-                self.gui.report_error(e)
+                self.gui._report_error(e)
                 time.sleep(30)
                 raise
 
@@ -132,7 +132,7 @@ class GUIPipeControl(threading.Thread):
                 if not line:
                     break
                 if line:
-                    match, brk, lstn = self.do_line_magic(line, None)
+                    match, lstn = self.do_line_magic(line, None)
                     if not match:
                         try:
                             cmd, args = line.strip().split(' ', 1)
@@ -140,7 +140,7 @@ class GUIPipeControl(threading.Thread):
                             self.do(cmd, args)
                         except (ValueError, IndexError, NameError), e:
                             if self.gui:
-                                self.gui.report_error(e)
+                                self.gui._report_error(e)
                                 time.sleep(30)
                             else:
                                 traceback.print_exc()

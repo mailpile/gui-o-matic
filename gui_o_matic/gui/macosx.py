@@ -83,7 +83,7 @@ class MacOSXGUI(BaseGUI):
         if item and item in self.items:
             self.items[item].setEnabled_(sensitive)
 
-    def notify_user(self, message=None):
+    def notify_user(self, message=None, popup=False):
         pass  # FIXME
 
     def run(self):

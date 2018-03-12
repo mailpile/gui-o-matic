@@ -19,7 +19,6 @@ class BaseGUI(object):
         self.config = config
         self.ready = False
         self.next_error_message = None
-        self._webview = None
 
     def _do(self, op, args):
         op, args = op.lower(), copy.copy(args)
@@ -61,7 +60,7 @@ class BaseGUI(object):
                 getattr(self, op)(**(args or {}))
 
         except Exception, e:
-            self.report_error(e)
+            self._report_error(e)
 
     def terminal(self, command='/bin/bash', title=None, icon=None):
         cmd = [
@@ -71,13 +70,9 @@ class BaseGUI(object):
         if icon:
             cmd += ["-n", icon]
         try:
-            subprocess.Popen(cmd,
-                close_fds=True,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE)
+            subprocess.Popen(cmd, close_fds=True)
         except Exception, e:
-            self.report_error(e)
+            self._report_error(e)
 
     def _theme_image(self, pathname):
         p = pathname.replace('%(theme)s', self.ICON_THEME)
@@ -115,28 +110,27 @@ class BaseGUI(object):
                            message=None, message_x=0.5, message_y=0.5):
         pass
 
-    def _get_webview(self):
-        return None
+    def hide_splash_screen(self):
+        pass
+
+    def show_main_window(self):
+        pass
+
+    def hide_main_window(self):
+        pass
 
     def show_url(self, url=None):
         assert(url is not None)
         try:
-            if not self.config.get('external_browser'):
-                webview = self._get_webview()
-                if webview:
-                    return webview.show_url(url)
             webbrowser.open(url)
         except Exception, e:
-            self.report_error(e)
+            self._report_error(e)
 
-    def report_error(self, e):
+    def _report_error(self, e):
         traceback.print_exc()
         self.notify_user(
                 (self.next_error_message or 'Error: %(error)s')
                 % {'error': unicode(e)})
 
-    def hide_splash_screen(self):
-        pass
-
-    def notify_user(self, message='Hello'):
+    def notify_user(self, message='Hello', popup=False):
         print('NOTIFY: %s' % message)
