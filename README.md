@@ -34,11 +34,6 @@ along with proprietary applications, but changes to GUI-o-Matic itself
 must be shared with the community.
 
 
-## Getting Started
-
-TODO: Write this!
-
-
 ## Supported Platforms
 
 GUI-o-Matic currently supports the following desktop environments:
@@ -47,10 +42,10 @@ GUI-o-Matic currently supports the following desktop environments:
    * MacOS X (partial)
    * Standard X11 (partial via pygtk)
 
-Ideally, future versions will add support for:
+Ideally, future versions will add complete support for:
 
    * Microsoft Windows
-   * GNOME
+   * GNOME / GTK3
    * KDE
 
 If you have experience developing user interface code on any of these
@@ -74,7 +69,6 @@ Planned features:
 
    * Dock icon with mutable icon and custom menu
    * System notifications (growl-style)
-   * Prompt the user for a password?
 
 The UI feature-set is deliberately meant to stay small, to increase the
 odds that the full functionality can be made available on all platforms.
@@ -99,25 +93,15 @@ single JSON structure for arguments. Examples:
 
     notify_user {"message": "Hello World!"}
 
-See below for a full list of available commands. The
+Consult the file [PROTOCOL.md](PROTOCOL.md) for a full specification
+of the program and a full list of available commands. The
 [scripts](./scripts/) folder contains working examples illustrating
 these concepts.
 
 
-## Reference
-
-### Configuration
-
-FIXME! :)
-
-### Commands
-
-FIXME! :)
-
-
 ## Credits and license
 
-Copyright 2016, Mailpile ehf. and Bjarni Rúnar Einarsson.
+Copyright 2016-2018, Mailpile ehf. and Bjarni Rúnar Einarsson.
 
 This program is free software: you can redistribute it and/or modify it
 under the terms of the GNU Lesser General Public License as published by
