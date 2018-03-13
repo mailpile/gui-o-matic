@@ -2,6 +2,7 @@ import copy
 import json
 import os
 import subprocess
+import threading
 import traceback
 import urllib
 import webbrowser
@@ -62,6 +63,16 @@ class BaseGUI(object):
         except Exception, e:
             self._report_error(e)
 
+    def _spawn(self, cmd):
+        def runit():
+            try:
+                subprocess.Popen(cmd, close_fds=True).wait()
+            except Exception, e:
+                self._report_error(e)
+        st = threading.Thread(target=runit)
+        st.daemon = True
+        st.start()
+
     def terminal(self, command='/bin/bash', title=None, icon=None):
         cmd = [
             "xterm",
@@ -69,10 +80,7 @@ class BaseGUI(object):
             "-e", command]
         if icon:
             cmd += ["-n", icon]
-        try:
-            subprocess.Popen(cmd, close_fds=True)
-        except Exception, e:
-            self._report_error(e)
+        self._spawn(cmd)
 
     def _theme_image(self, pathname):
         p = pathname.replace('%(theme)s', self.ICON_THEME)
