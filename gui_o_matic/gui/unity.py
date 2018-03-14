@@ -15,8 +15,7 @@ class UnityGUI(GtkBaseGUI):
         'normal': appindicator.STATUS_ACTIVE,
         'working': appindicator.STATUS_ACTIVE,
         'attention': appindicator.STATUS_ATTENTION,
-        'shutdown': appindicator.STATUS_ATTENTION,
-    }
+        'shutdown': appindicator.STATUS_ATTENTION}
 
     def _indicator_setup(self):
         self.ind = appindicator.Indicator(

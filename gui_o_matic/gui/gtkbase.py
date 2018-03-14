@@ -1,3 +1,4 @@
+import pango
 import gobject
 import gtk
 import threading
@@ -17,6 +18,8 @@ class GtkBaseGUI(BaseGUI):
     def __init__(self, config):
         BaseGUI.__init__(self, config)
         self.splash = None
+        self.font_styles = {}
+        self.substatus = {}
         if pynotify:
             pynotify.init(config.get('app_name', 'gui-o-matic'))
         gobject.threads_init()
@@ -103,16 +106,67 @@ class GtkBaseGUI(BaseGUI):
             icon_container.pack_start(icon, False, True)
             self.main_window['indicator_icon'] = icon
 
+    def _set_substatus_icon(self, status, icon_path, size=32):
+        if 'icon' in status:
+            themed_icon = self._theme_image(icon_path)
+            img = gtk.gdk.pixbuf_new_from_file(themed_icon)
+            img = img.scale_simple(size, size, gtk.gdk.INTERP_BILINEAR)
+            status['icon'].set_from_pixbuf(img)
+            status['icon_size'] = size
+
     def _main_window_default_style(self):
         wcfg = self.config['main_window']
-        vbox = gtk.VBox(False, 5)
-        vbox.set_border_width(5)
+        vbox = gtk.VBox(False, 0)
+        vbox.set_border_width(7)
 
-        # TODO: Allow user to configure alignment of message, padding?
+        # Enforce that the window always has at least one status section,
+        # even if the configuration doesn't specify one.
+        stat_defs = wcfg.get("substatus") or [{"item": "status", "label": ""}]
 
-        lbl = gtk.Label()
-        lbl.set_markup(wcfg.get('message', ''))
-        lbl.set_alignment(0.0, 0.5)
+        # Scale the status icons relative to a) how tall the window is,
+        # and b) how many status lines we are showing.
+        icon_size = int(0.66 * wcfg.get('height', 360) / len(stat_defs))
+
+        substatuses = []
+        for st in stat_defs:
+            ss = {
+                'item': st['item'],
+                'hbox': gtk.HBox(False, 5),
+                'vbox': gtk.VBox(False, 5),
+                'label': gtk.Label(),
+                'hint': gtk.Label()}
+
+            for which in ('label', 'hint'):
+                ss[which].set_markup(st.get(which, ''))
+                if which in self.font_styles:
+                    ss[which].modify_font(self.font_styles[which])
+
+            if 'icon' in st:
+                ss['icon'] = gtk.Image()
+                ss['hbox'].pack_start(ss['icon'], False, True)
+                self._set_substatus_icon(ss, st['icon'], icon_size)
+                text_x = 0.0
+            else:
+                # If there is no icon, center our labels and hints.
+                text_x = 0.5
+
+            ss['label'].set_alignment(text_x, 1.0)
+            ss['hint'].set_alignment(text_x, 0.0)
+            ss['vbox'].pack_start(ss['label'], True, True)
+            ss['vbox'].pack_end(ss['hint'], True, True)
+            ss['vbox'].set_spacing(1)
+            ss['hbox'].pack_start(ss['vbox'], True, True)
+            ss['hbox'].set_spacing(7)
+            substatuses.append(ss)
+        self.substatus = dict((ss['item'], ss) for ss in substatuses)
+
+        status = None
+        if 'status' not in self.substatus:
+            status = gtk.Label()
+            status.set_markup(wcfg.get('label', ''))
+            status.set_alignment(0, 0.5)
+            if 'status' in self.font_styles:
+                status.modify_font(self.font_styles['status'])
 
         if wcfg.get('image'):
             self._set_background_image(vbox, wcfg.get('image'))
@@ -121,13 +175,17 @@ class GtkBaseGUI(BaseGUI):
 
         self._main_window_indicator(vbox, button_box)
         self._main_window_add_actions(button_box)
-        vbox.pack_start(lbl, True, True)
+        if status:
+            button_box.pack_start(status, True, True)
+        for ss in substatuses:
+            vbox.pack_start(ss['hbox'], True, True)
         vbox.pack_end(button_box, False, True)
 
         self.main_window['window'].add(vbox)
         self.main_window.update({
             'vbox': vbox,
-            'label': lbl,
+            'status': (status if status else self.substatus['status']['hint']),
+            'substatuses': substatuses,
             'buttons': button_box})
 
     # TODO: Add other window styles?
@@ -209,6 +267,8 @@ class GtkBaseGUI(BaseGUI):
                 lbl = gtk.Label()
                 lbl.set_markup(message or '')
                 lbl.set_alignment(message_x, message_y)
+                if 'splash' in self.font_styles:
+                    lbl.modify_font(self.font_styles['splash'])
                 vbox.pack_start(lbl, True, True)
             else:
                 lbl = None
@@ -270,13 +330,14 @@ class GtkBaseGUI(BaseGUI):
                     message, "dialog-warning")
                 notification.set_urgency(pynotify.URGENCY_NORMAL)
                 notification.show()
-            elif popup:
-                print('FIXME: Notify: %s' % message)
-            elif self.splash:
+            if popup:
+                print('FIXME: Should popup: %s' % message)
+            # FIXME: if (not elif) here, so messages don't get lost
+            if self.splash:
                 self.update_splash_screen(message=message, _now=True)
             elif self.main_window:
-                self.main_window['label'].set_markup(
-                    message.replace('<', '&lt;'))
+                msg = message.replace('<', '&lt;')
+                self.main_window['status'].set_markup(msg)
             else:
                 print('FIXME: Notify: %s' % message)
         gobject.idle_add(notify, self)
@@ -299,7 +360,7 @@ class GtkBaseGUI(BaseGUI):
             do = lambda o, a: o(a)
         else:
             do = gobject.idle_add
-        icons = self.config.get('indicator', {}).get('icons')
+        icons = self.config.get('icons')
         if icons:
             icon = icons.get(status)
             if not icon:
@@ -307,6 +368,23 @@ class GtkBaseGUI(BaseGUI):
             if icon:
                 self._indicator_set_icon(icon, do=do)
         self._indicator_set_status(status, do=do)
+
+    def set_substatus(self,
+            substatus=None, label=None, hint=None, icon=None, color=None):
+        status = self.substatus.get(substatus)
+        if not status:
+            return
+        if icon:
+            self._set_substatus_icon(status, icon, status.get('icon_size', 32))
+        if label:
+            status['label'].set_markup(label)
+        if hint:
+            status['hint'].set_markup(hint)
+        if color:
+            color = gtk.gdk.color_parse(color)
+            for which in ('label', 'hint'):
+                status[which].modify_fg(gtk.STATE_NORMAL, color)
+                status[which].modify_text(gtk.STATE_NORMAL, color)
 
     def set_item_label(self, item=None, label=None):
         if item and item in self.items:
@@ -316,7 +394,17 @@ class GtkBaseGUI(BaseGUI):
         if item and item in self.items:
             gobject.idle_add(self.items[item].set_sensitive, sensitive)
 
+    def _font_setup(self):
+        for name, style in self.config.get('font-styles', {}).iteritems():
+            pfd = pango.FontDescription()
+            pfd.set_family(style.get('family', 'normal'))
+            pfd.set_size(style.get('points', 12) * pango.SCALE)
+            if style.get('italic'): pfd.set_style(pango.STYLE_ITALIC)
+            if style.get('bold'): pfd.set_weight(pango.WEIGHT_BOLD)
+            self.font_styles[name] = pfd
+
     def run(self):
+        self._font_setup()
         self._menu_setup()
         if self.config.get('indicator') and self._HAVE_INDICATOR:
             self._indicator_setup()

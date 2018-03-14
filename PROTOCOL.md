@@ -171,9 +171,21 @@ Arguments:
    * status: "startup", "normal", "working", ...
 
 Sets the overall "status" of the application, which will be displayed by
-changing an indicator icon somewhere within the app. Which statuses are
-available depends on the `indicator: icons: { ... }` section of the
-configuration.
+changing an indicator icon somewhere within the app. All statuses should
+have an icon defined in the `icons: { ... }` section of the configuration.
+
+### set_substatus
+
+Arguments:
+
+   * substatus: (string) The ID of the substatus section
+   * label: (optional string) Updated text for the main label
+   * hint: (optional string) Updated text for the hint label
+   * icon: (optional string) FS path or reference to an entry in `icons`
+   * color: (optional #rgb/#rrggbb string) Color for label text
+
+This will update some or all of the elements of one of the substatus
+sections in the main window.
 
 ### set_item_label
 
@@ -216,7 +228,7 @@ controlling app.
 Arguments:
 
    * message: (string) Tell the user something
-   * popup: (bool, optional) Prefer an OSD/growl/popup style notification
+   * popup: (optional bool) Prefer an OSD/growl/popup style notification
 
 This method should always try and display a message to the user, no matter
 which windows are visible:
@@ -244,8 +256,8 @@ platforms. Needs further research.*
 Arguments:
 
    * command: (string) The shell command to launch
-   * title: (string) The preferred terminal window title
-   * icon: (path) The preferred terminal window icon
+   * title: (optional string) The preferred terminal window title
+   * icon: (optional string) FS path or reference to an entry in `icons`
 
 Spawn a command in a visible terminal, so the user can interact with it.
 

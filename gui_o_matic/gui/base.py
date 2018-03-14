@@ -79,12 +79,13 @@ class BaseGUI(object):
             "-T", title or self.config.get('app_name', 'gui-o-matic'),
             "-e", command]
         if icon:
-            cmd += ["-n", icon]
+            cmd += ["-n", self._theme_image(icon)]
         self._spawn(cmd)
 
-    def _theme_image(self, pathname):
-        p = pathname.replace('%(theme)s', self.ICON_THEME)
-        return os.path.abspath(p)
+    def _theme_image(self, path):
+        if path.startswith('icon:'):
+            path = self.config['icons'][path.split(':', 1)[1]]
+        return os.path.abspath(path.replace('%(theme)s', self.ICON_THEME))
 
     def _add_menu_item(self, item='item', label='Menu item', sensitive=False,
                              op=None, args=None, **ignored_kwargs):
@@ -105,6 +106,10 @@ class BaseGUI(object):
         pass
 
     def set_item_sensitive(self, item=None, sensitive=True):
+        pass
+
+    def set_substatus(self,
+            substatus=None, label=None, hint=None, icon=None, color=None):
         pass
 
     def update_splash_screen(self, message=None, progress=None):

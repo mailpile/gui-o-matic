@@ -24,8 +24,8 @@ export ROTATE_TOUCH_INVERTED="$DEV_TOUCH |xargs -L 1 -I DEV xinput set-prop DEV 
     {
         "app_name": "xflipflop",
         "app_id": "xflipflop",
+        "icons": {"startup": "$ICON"},
         "indicator": {
-            "icons": {"startup": "$ICON"},
             "menu": [
                 {
                     "label": "Laptop",

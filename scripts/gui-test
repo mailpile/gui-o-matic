@@ -7,6 +7,13 @@ export PARPID=$$
     "app_name": "Indicator Test",
     "app_icon": "$BASEDIR/img/gt-normal-%(theme)s.png",
     "require_gui": "unity macosx gtk",
+    "icons": {
+        "startup": "$BASEDIR/img/gt-startup-%(theme)s.png",
+        "normal": "$BASEDIR/img/gt-normal-%(theme)s.png",
+        "working": "$BASEDIR/img/gt-working-%(theme)s.png",
+        "attention": "$BASEDIR/img/gt-attention-%(theme)s.png",
+        "shutdown": "$BASEDIR/img/gt-shutdown-%(theme)s.png"
+    },
     "main_window": {
         "show": false,
         "message": "Hello world!\\nThis is my message for you.",
@@ -47,13 +54,6 @@ export PARPID=$$
         ]
     },
     "indicator": {
-        "icons": {
-            "startup": "$BASEDIR/img/gt-startup-%(theme)s.png",
-            "normal": "$BASEDIR/img/gt-normal-%(theme)s.png",
-            "working": "$BASEDIR/img/gt-working-%(theme)s.png",
-            "attention": "$BASEDIR/img/gt-attention-%(theme)s.png",
-            "shutdown": "$BASEDIR/img/gt-shutdown-%(theme)s.png"
-        },
         "menu": [
             {
                 "label": "Indicator test",
