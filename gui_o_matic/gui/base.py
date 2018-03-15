@@ -63,15 +63,27 @@ class BaseGUI(object):
         except Exception, e:
             self._report_error(e)
 
-    def _spawn(self, cmd):
-        def runit():
+    def _spawn(self, cmd, report_errors=True, _raise=False):
+        def waiter(proc):
             try:
-                subprocess.Popen(cmd, close_fds=True).wait()
+                rv = proc.wait()
+                if rv:
+                    raise Exception('%s returned: %d' % (cmd[0], rv))
             except Exception, e:
+                if report_errors:
+                    self._report_error(e)
+        try:
+            proc = subprocess.Popen(cmd, close_fds=True)
+            st = threading.Thread(target=waiter, args=[proc])
+            st.daemon = True
+            st.start()
+            return True
+        except Exception, e:
+            if _raise:
+                raise
+            elif report_errors:
                 self._report_error(e)
-        st = threading.Thread(target=runit)
-        st.daemon = True
-        st.start()
+        return False
 
     def terminal(self, command='/bin/bash', title=None, icon=None):
         cmd = [

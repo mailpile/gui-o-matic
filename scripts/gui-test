@@ -88,6 +88,7 @@ echo 'update_splash_screen {"progress": 0.5}'
 echo 'set_item_sensitive {"item": "menu-xkcd"}'
 echo 'set_item_sensitive {"item": "btn-xkcd"}'
 echo 'notify_user {"message": "This is a notification"}'
+echo 'notify_user {"message": "This is a popup notification", "popup": true}'
 
 sleep 2
 echo 'update_splash_screen {"progress": 1.0}'

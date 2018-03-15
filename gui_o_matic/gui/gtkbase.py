@@ -322,17 +322,35 @@ class GtkBaseGUI(BaseGUI):
 
     def notify_user(self, message='Hello', popup=False):
         def notify(self):
+            # We always update the indicator status with the latest
+            # notification.
             if 'status' in self.items:
                 self.items['status'].set_label(message)
-            if popup and pynotify:
-                notification = pynotify.Notification(
-                    self.config.get('app_name', 'gui-o-matic'),
-                    message, "dialog-warning")
-                notification.set_urgency(pynotify.URGENCY_NORMAL)
-                notification.show()
+
+            # Popups!
             if popup:
-                print('FIXME: Should popup: %s' % message)
-            # FIXME: if (not elif) here, so messages don't get lost
+                popup_icon = 'dialog-warning'
+                if 'app_icon' in self.config:
+                    popup_icon = self._theme_image(self.config['app_icon'])
+                popup_appname = self.config.get('app_name', 'gui-o-matic')
+                if pynotify is not None:
+                    notification = pynotify.Notification(
+                        popup_appname, message, popup_icon)
+                    notification.set_urgency(pynotify.URGENCY_NORMAL)
+                    notification.show()
+                    return
+                elif not self.config.get('disable-popup-fallback'):
+                    try:
+                        if self._spawn([
+                                    'notify-send',
+                                    '-i', popup_icon, popup_appname,
+                                    message],
+                                report_errors=False):
+                            return
+                    except:
+                        print('FIXME: Should popup: %s' % message)
+
+            # Note: popups also fall through to here if we can't pop up
             if self.splash:
                 self.update_splash_screen(message=message, _now=True)
             elif self.main_window:
