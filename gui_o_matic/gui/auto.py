@@ -11,6 +11,13 @@ def AutoGUI(config, *args, **kwargs):
                  (required or config.get('prefer_gui', '')).split()
                  if pref]
 
+    if not preferred or 'winapi' in preferred:
+        try:
+            from gui_o_matic.gui.winapi import GUI
+            return GUI(config, *args, **kwargs)
+        except ImportError:
+            pass
+
     if not preferred or 'macosx' in preferred:
         try:
             from gui_o_matic.gui.macosx import GUI
