@@ -21,14 +21,31 @@ class BaseGUI(object):
         self.ready = False
         self.next_error_message = None
 
+    def _get_url(self, args, remove=False):
+        if isinstance(args, list):
+            if remove:
+                return args.pop(0), args
+            else:
+                return args[0], args
+        elif isinstance(args, dict):
+            url = args['_url']
+            if remove:
+                del args['_url']
+            return url, args
+        elif remove:
+            return args, None
+        else:
+            return args, args
+
     def _do(self, op, args):
         op, args = op.lower(), copy.copy(args)
         try:
             if op == 'show_url':
-                self.show_url(url=args[0])
+                url, args = self._get_url(args)
+                self.show_url(url=url)
 
             elif op in ('get_url', 'post_url'):
-                url = args.pop(0)
+                url, args = self._get_url(args, remove=True)
                 base_url = '/'.join(url.split('/')[:3])
 
                 uo = urllib.URLopener()

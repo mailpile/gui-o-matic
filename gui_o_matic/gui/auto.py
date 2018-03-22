@@ -6,9 +6,9 @@ def AutoGUI(config, *args, **kwargs):
     Load and instanciate the best GUI available for this machine.
     """
 
-    required = config.get('require_gui')
+    required = config.get('_require_gui')
     preferred = [pref.strip().lower() for pref in
-                 (required or config.get('prefer_gui', '')).split()
+                 (required or config.get('_prefer_gui', []))
                  if pref]
 
     if not preferred or 'winapi' in preferred:
