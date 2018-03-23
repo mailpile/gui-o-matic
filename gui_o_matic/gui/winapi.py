@@ -11,12 +11,167 @@ import ctypes
 #
 import re
 import tempfile
-from PIL import Image
+import PIL.Image
 import os
 import uuid
 import traceback
 
 from gui_o_matic.gui.base import BaseGUI
+
+
+class Image( object ):
+    '''
+    Helper class for importing arbitrary graphics to winapi bitmaps
+    '''
+
+    @classmethod
+    def Bitmap( cls, path, size = None ):
+        return cls( path, size, mode = (win32con.IMAGE_BMP,'bmp'))
+
+    # https://blog.barthe.ph/2009/07/17/wmseticon/
+    #
+    @classmethod
+    def Icon( cls, path, size ):
+        return cls( path, mode = (win32con.IMAGE_ICON,'ico'), size = size )
+
+    @classmethod
+    def IconLarge( cls, path ):
+        dims =(win32con.SM_CXICON, win32con.SM_CYICON)
+        size = tuple(map(win32api.GetSystemMetrics,dims))
+        return cls.Icon( path, size )
+
+    @classmethod
+    def IconSmall( cls, path ):
+        dims =(win32con.SM_CXSMICON, win32con.SM_CYSMICON)
+        size = tuple(map(win32api.GetSystemMetrics,dims))
+        return cls.Icon( path, size )
+
+    def __init__( self, path, mode, size = None ):
+        source = PIL.Image.open( path )
+        if source.mode != 'RGBA':
+            source = source.convert( 'RGBA' )
+        if size:
+            factor = float(max( size )) / max( source.size )
+            new_size = tuple([ int(factor * dim) for dim in source.size ])
+            source = source.resize( new_size, PIL.Image.LANCZOS )
+            source.thumbnail( size, PIL.Image.ANTIALIAS )
+
+        self.size = source.size
+        self.mode = mode
+            
+        with tempfile.NamedTemporaryFile( delete = False ) as handle:
+            filename = handle.name
+            source.save( handle, mode[ 1 ] )
+
+        try:
+            self.handle = win32gui.LoadImage( None,
+                                              handle.name,
+                                              mode[ 0 ],
+                                              source.width,
+                                              source.height,
+                                              win32con.LR_LOADFROMFILE )
+        finally:
+            os.unlink( filename )
+
+
+class Window( object ):
+    '''
+    Window class stub
+    '''
+    # Standard window style except disable resizing
+    #
+    main_window_style = win32con.WS_OVERLAPPEDWINDOW \
+                        ^ win32con.WS_THICKFRAME     \
+                        ^ win32con.WS_MAXIMIZEBOX
+
+    # Window style with no frills
+    #
+    splash_screen_style = win32con.WS_POPUP
+
+    _next_window_class_id = 0
+
+    @classmethod
+    def _make_window_class_name( cls ):
+        result = "window_class_{}".format( cls._next_window_class_id )
+        cls._next_window_class_id += 1
+        return result
+
+    def __init__(self, title, width, height, style, icon = None, messages = {} ):
+        '''Setup a window class and a create window'''
+        self.module_handle = win32gui.GetModuleHandle(None)
+
+        # Setup window class
+        #
+        self.window_class_name = self._make_window_class_name()
+        self.message_map = {
+             win32con.WM_PAINT: self._on_paint,
+             win32con.WM_CLOSE: self._on_close,
+             win32con.WM_COMMAND: self._on_command,
+             }
+        self.message_map.update( messages )
+
+        self.window_class = win32gui.WNDCLASS()
+        self.window_class.style = win32con.CS_HREDRAW | win32con.CS_VREDRAW
+        self.window_class.lpfnWndProc = self.message_map
+        self.window_class.hInstance = self.module_handle
+        if icon:
+            self.window_class.hIcon = icon
+        self.window_class.hCursor = win32gui.LoadCursor( None, win32con.IDC_ARROW )
+        self.window_class.hbrBackground = win32con.COLOR_WINDOW
+        self.window_class.lpszClassName = self.window_class_name
+            
+        self.window_classHandle = win32gui.RegisterClass( self.window_class )
+
+        self.window_handle = win32gui.CreateWindow(
+            self.window_class_name,
+            title,
+            style,
+            win32con.CW_USEDEFAULT,
+            win32con.CW_USEDEFAULT,
+            width,
+            height,
+            None,
+            None,
+            self.module_handle,
+            None )
+
+    def set_visibility( self, visibility  ):
+        state = win32con.SW_SHOW if visibility else win32con.SW_HIDE
+        win32gui.ShowWindow( self.window_handle, state )
+        win32gui.UpdateWindow( self.window_handle )
+
+    def set_icon( self, small_icon, big_icon ):
+        # https://stackoverflow.com/questions/16472538/changing-taskbar-icon-programatically-win32-c
+        #
+        win32gui.SendMessage(self.window_handle,
+                             win32con.WM_SETICON,
+                             win32con.ICON_BIG,
+                             big_icon.handle )
+        
+        win32gui.SendMessage(self.window_handle,
+                             win32con.WM_SETICON,
+                             win32con.ICON_SMALL,
+                             small_icon.handle )
+
+    def _on_command( self, window_handle, message, wparam, lparam ):
+         return 0
+
+    def _on_paint( self, window_handle, message, wparam, lparam ):
+        (hdc, paintStruct) = win32gui.BeginPaint( self.window_handle )
+        #print paintStruct
+        #win32gui.FillRect( hdc, paintStruct[2], win32con.COLOR_WINDOW )
+        message = "text message"
+        win32gui.DrawText( hdc, message, len( message ), (5,5,100,100), win32con.DT_SINGLELINE | win32con.DT_NOCLIP  )
+        win32gui.EndPaint( self.window_handle, paintStruct )
+        #win32gui.DrawMenuBar( self.window_handle )
+        return 0
+
+    def _on_close( self, window_handle, message, wparam, lparam ):
+        self.set_visibility( False )
+        return 0
+
+    def close( self ):
+        self.onClose()
 
 class WinapiGUI(BaseGUI):
     """
@@ -109,148 +264,6 @@ class WinapiGUI(BaseGUI):
             assert( self.sensitive )
             self.gui._do( op = self.operation, args = self.args )
 
-    class Image( object ):
-        '''
-        Helper class for importing arbitrary graphics to winapi bitmaps
-        '''
-
-        @classmethod
-        def Bitmap( cls, path, size = None ):
-            return cls( path, size, mode = (win32con.IMAGE_BMP,'bmp'))
-
-        # https://blog.barthe.ph/2009/07/17/wmseticon/
-        #
-        @classmethod
-        def Icon( cls, path, size ):
-            return cls( path, mode = (win32con.IMAGE_ICON,'ico'), size = size )
-
-        @classmethod
-        def IconLarge( cls, path ):
-            dims =(win32con.SM_CXICON, win32con.SM_CYICON)
-            size = tuple(map(win32api.GetSystemMetrics,dims))
-            return cls.Icon( path, size )
-
-        @classmethod
-        def IconSmall( cls, path ):
-            dims =(win32con.SM_CXSMICON, win32con.SM_CYSMICON)
-            size = tuple(map(win32api.GetSystemMetrics,dims))
-            return cls.Icon( path, size )
-
-        def __init__( self, path, mode, size = None ):
-            source = Image.open( path )
-            if source.mode != 'RGBA':
-                source = source.convert( 'RGBA' )
-            if size:
-                factor = float(max( size )) / max( source.size )
-                new_size = tuple([ int(factor * dim) for dim in source.size ])
-                source = source.resize( new_size, Image.LANCZOS )
-                source.thumbnail( size, Image.ANTIALIAS )
-            self.size = source.size
-            self.mode = mode
-            
-            with tempfile.NamedTemporaryFile( delete = False ) as handle:
-                filename = handle.name
-                source.save( handle, mode[ 1 ] )
-
-            try:
-                print( source.size )
-                self.handle = win32gui.LoadImage( None,
-                                                  handle.name,
-                                                  mode[ 0 ],
-                                                  source.width,
-                                                  source.height,
-                                                  win32con.LR_LOADFROMFILE )
-            finally:
-                os.unlink( filename )
-
-
-    class Window( object ):
-        '''
-        Window class stub
-        '''
-
-        # Standard window style except disable resizing
-        #
-        main_window_style = win32con.WS_OVERLAPPEDWINDOW \
-                            ^ win32con.WS_THICKFRAME     \
-                            ^ win32con.WS_MAXIMIZEBOX
-
-        # Window style with no frills
-        #
-        splash_screen_style = win32con.WS_POPUP
-
-        _next_window_class_id = 0
-
-        @classmethod
-        def _make_window_class_name( cls ):
-            result = "window_class_{}".format( cls._next_window_class_id )
-            cls._next_window_class_id += 1
-            return result
-
-        def __init__(self, title, width, height, style, icon = None, messages = {} ):
-            '''Setup a window class and a create window'''
-            self.module_handle = win32gui.GetModuleHandle(None)
-
-            # Setup window class
-            #
-            self.window_class_name = self._make_window_class_name()
-            self.message_map = {
-                win32con.WM_PAINT: self._on_paint,
-                win32con.WM_CLOSE: self._on_close,
-                win32con.WM_COMMAND: self._on_command,
-                }
-            self.message_map.update( messages )
-
-            self.window_class = win32gui.WNDCLASS()
-            self.window_class.style = win32con.CS_HREDRAW | win32con.CS_VREDRAW
-            self.window_class.lpfnWndProc = self.message_map
-            self.window_class.hInstance = self.module_handle
-            if icon:
-                self.window_class.hIcon = icon
-            self.window_class.hCursor = win32gui.LoadCursor( None, win32con.IDC_ARROW )
-            self.window_class.hbrBackground = win32con.COLOR_WINDOW
-            self.window_class.lpszClassName = self.window_class_name
-            
-            self.window_classHandle = win32gui.RegisterClass( self.window_class )
-            assert( self.window_classHandle )
-
-            self.window_handle = win32gui.CreateWindow(
-                self.window_class_name,
-                title,
-                style,
-                win32con.CW_USEDEFAULT,
-                win32con.CW_USEDEFAULT,
-                width,
-                height,
-                None,
-                None,
-                self.module_handle,
-                None )
-
-        def set_visibility( self, visibility  ):
-            state = win32con.SW_SHOW if visibility else win32con.SW_HIDE
-            win32gui.ShowWindow( self.window_handle, state )
-            win32gui.UpdateWindow( self.window_handle )
-            
-        def _on_command( self, window_handle, message, wparam, lparam ):
-            return 0
-
-        def _on_paint( self, window_handle, message, wparam, lparam ):
-            (hdc, paintStruct) = win32gui.BeginPaint( self.window_handle )
-            #print paintStruct
-            #win32gui.FillRect( hdc, paintStruct[2], win32con.COLOR_WINDOW )
-            message = "text message"
-            win32gui.DrawText( hdc, message, len( message ), (5,5,100,100), win32con.DT_SINGLELINE | win32con.DT_NOCLIP  )
-            win32gui.EndPaint( self.window_handle, paintStruct )
-            #win32gui.DrawMenuBar( self.window_handle )
-            return 0
-
-        def _on_close( self, window_handle, message, wparam, lparam ):
-            self.set_visibility( False )
-            return 0
-
-        def close( self ):
-            self.onClose()
 
 
     _variable_re = re.compile( "%\(([\w]+)\)s" )
@@ -274,8 +287,8 @@ class WinapiGUI(BaseGUI):
         super(WinapiGUI,self).__init__(config)
         self.variables = variables
         self.ready = False
+        self.statuses = {}
 
-    
     def run( self ):
         '''
         Initialize GUI and enter run loop
@@ -285,35 +298,22 @@ class WinapiGUI(BaseGUI):
         self.appid = unicode( uuid.uuid4() )
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(self.appid)
         win32gui.InitCommonControls()
-
-        icon_path = self._resolve_variables( self.config[ 'icons' ][ 'normal' ] )
-        small_icon = self.Image.IconSmall( icon_path )
-        big_icon = self.Image.IconLarge( icon_path )
         
         # Stub code!
-        self.main_window = self.Window(title = self.config['app_name'],
-                                       width = self.config['main_window']['width'],
-                                       height = self.config['main_window']['height'],
-                                       style = self.Window.main_window_style,
-                                       icon = small_icon.handle )
+        self.main_window = Window(title = self.config['app_name'],
+                                  width = self.config['main_window']['width'],
+                                  height = self.config['main_window']['height'],
+                                  style = Window.main_window_style)
         
         self.main_window.set_visibility( self.config['main_window']['show'] )
         
-        self.splash_screen = self.Window(title = self.config['app_name'],
-                                         width = self.config['main_window']['width'],
-                                         height = self.config['main_window']['height'],
-                                         style = self.Window.splash_screen_style,
-                                         icon = small_icon.handle)
+        self.splash_screen = Window(title = self.config['app_name'],
+                                    width = self.config['main_window']['width'],
+                                    height = self.config['main_window']['height'],
+                                    style = Window.splash_screen_style)
 
         self.windows = [ self.main_window, self.splash_screen ]
-        
-        # https://stackoverflow.com/questions/16472538/changing-taskbar-icon-programatically-win32-c
-        #
-        for window in self.windows:
-            win32gui.SendMessage(window.window_handle,
-                                 win32con.WM_SETICON,
-                                 win32con.ICON_BIG,
-                                 big_icon.handle )
+        self.set_status( 'normal' )
 
         # Enter run loop
         #
@@ -331,6 +331,13 @@ class WinapiGUI(BaseGUI):
         pass
 
     def set_status(self, status='startup'):
+        icon_path = self._resolve_variables( self.config['icons'][status] )
+        small_icon = Image.IconSmall( icon_path )
+        large_icon = Image.IconLarge( icon_path )
+
+        for window in self.windows:
+            window.set_icon( small_icon, large_icon )
+
         print('STATUS: %s' % status)
 
     def quit(self):
