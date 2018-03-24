@@ -60,8 +60,8 @@ class MacOSXGUI(BaseGUI):
 
         # Load all images, set initial
         self.images = {}
-        icons = self.config.get('indicator', {}).get('icons', {})
-        for s, p in icons.iteritems():
+        images = self.config.get('indicator', {}).get('images', {})
+        for s, p in images.iteritems():
             p = self._theme_image(p)
             self.images[s] = NSImage.alloc().initByReferencingFile_(p)
         if self.images:

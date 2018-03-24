@@ -378,11 +378,11 @@ class GtkBaseGUI(BaseGUI):
             do = lambda o, a: o(a)
         else:
             do = gobject.idle_add
-        icons = self.config.get('icons')
-        if icons:
-            icon = icons.get(status)
+        images = self.config.get('images')
+        if images:
+            icon = images.get(status)
             if not icon:
-                icon = icons.get('normal')
+                icon = images.get('normal')
             if icon:
                 self._indicator_set_icon(icon, do=do)
         self._indicator_set_status(status, do=do)

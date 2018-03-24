@@ -112,8 +112,8 @@ class BaseGUI(object):
         self._spawn(cmd)
 
     def _theme_image(self, path):
-        if path.startswith('icon:'):
-            path = self.config['icons'][path.split(':', 1)[1]]
+        if path.startswith('image:'):
+            path = self.config['images'][path.split(':', 1)[1]]
         return os.path.abspath(path.replace('%(theme)s', self.ICON_THEME))
 
     def _add_menu_item(self, item='item', label='Menu item', sensitive=False,

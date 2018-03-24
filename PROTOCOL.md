@@ -66,9 +66,9 @@ section means. They should be omitted from any actual implementation
         },
     ...
 
-The `icons` section defines a dictionary of named icons/images. The names can
+The `images` section defines a dictionary of named icons/images. The names can
 be used directly by the `set_status` method, or anywhere an icon path can be
-provided by using the syntax `icon:NAME` instead.
+provided by using the syntax `image:NAME` instead.
 
 The only required entry is `normal`.
 
@@ -79,7 +79,7 @@ the word `dark`. The current draft OS X backend requests an `osx` theme because
 at some point Mac OS X needed slightly different icons from the others.
 
     ...
-        "icons": {
+        "images": {
             "normal": "/path/to/%(theme)s/normal.svg",
             "flipper": "/path/to/unthemed/flipper.png",
             "flopper": "/path/to/flop-%(theme)s.png"
@@ -142,7 +142,7 @@ some of the actions to a hamburger "overflow" menu.
             "height": 330,
 
             # Background image.  May be ignored on some platforms.
-            "image": "icon:background",
+            "image": "image:background",
 
             # Default status label text
             "status": "",
@@ -159,7 +159,7 @@ hints.
             "substatus": [
                 {
                     "item": "internal-identifying-name",
-                    "icon": "icon:something",
+                    "icon": "image:something",
                     "label": "Hello world!",
                     "hint": "Greetings and salutations to all!"
                 },{
@@ -444,7 +444,7 @@ Arguments:
 
 Sets the overall "status" of the application, which will be displayed by
 changing an indicator icon somewhere within the app. All statuses should
-have an icon defined in the `icons: { ... }` section of the configuration.
+have an icon defined in the `images: { ... }` section of the configuration.
 
 ### set_substatus
 
@@ -453,7 +453,7 @@ Arguments:
    * substatus: (string) The ID of the substatus section
    * label: (optional string) Updated text for the main label
    * hint: (optional string) Updated text for the hint label
-   * icon: (optional string) FS path or reference to an entry in `icons`
+   * icon: (optional string) FS path or reference to an entry in `images`
    * color: (optional #rgb/#rrggbb string) Color for label text
 
 This will update some or all of the elements of one of the substatus
@@ -529,7 +529,7 @@ Arguments:
 
    * command: (string) The shell command to launch
    * title: (optional string) The preferred terminal window title
-   * icon: (optional string) FS path or reference to an entry in `icons`
+   * icon: (optional string) FS path or reference to an entry in `images`
 
 Spawn a command in a visible terminal, so the user can interact with it.
 
