@@ -87,10 +87,10 @@ at some point Mac OS X needed slightly different icons from the others.
         },
     ...
 
-In `font-styles`, we define font styles used in different parts of the app.
+In `font_styles`, we define font styles used in different parts of the app.
 
     ...
-        "font-styles": {
+        "font_styles": {
             # Style used by labels in the main window
             "label": {
                 "family": "normal",

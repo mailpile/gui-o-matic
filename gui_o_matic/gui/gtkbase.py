@@ -413,7 +413,7 @@ class GtkBaseGUI(BaseGUI):
             gobject.idle_add(self.items[item].set_sensitive, sensitive)
 
     def _font_setup(self):
-        for name, style in self.config.get('font-styles', {}).iteritems():
+        for name, style in self.config.get('font_styles', {}).iteritems():
             pfd = pango.FontDescription()
             pfd.set_family(style.get('family', 'normal'))
             pfd.set_size(style.get('points', 12) * pango.SCALE)
