@@ -102,6 +102,18 @@ class BaseGUI(object):
                 self._report_error(e)
         return False
 
+    def set_http_cookie(self, domain=None, key=None, value=None, remove=False):
+        all_cookies = self.config.get('http_cookies', {})
+        domain_cookies = all_cookies.get(domain, {})
+        if remove:
+            if key in domain_cookies:
+                del domain_cookies[key]
+        else:
+            domain_cookies[key] = value
+            # Ensure the cookie config section exists
+            all_cookies[domain] = domain_cookies
+            self.config['http_cookies'] = all_cookies
+
     def terminal(self, command='/bin/bash', title=None, icon=None):
         cmd = [
             "xterm",
