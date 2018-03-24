@@ -6,7 +6,7 @@ export PARPID=$$
 {
     "app_name": "Indicator Test",
     "app_icon": "$BASEDIR/img/gt-normal-%(theme)s.png",
-    "require_gui": "unity macosx gtk",
+    "_prefer_gui": ["unity", "macosx"],
     "icons": {
         "startup": "$BASEDIR/img/gt-startup-%(theme)s.png",
         "normal": "$BASEDIR/img/gt-normal-%(theme)s.png",
