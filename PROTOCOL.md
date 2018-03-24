@@ -117,7 +117,7 @@ The `main_window` section defines the main app window. The main app window has
 the following elements:
 
    * Substatuses (an icon, a text label and a text hint/description)
-   * Actions (buttons or checkboxes)
+   * Actions (buttons or menu items)
    * A notification display element (text label)
    * A background image
 

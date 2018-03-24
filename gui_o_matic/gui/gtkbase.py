@@ -69,13 +69,18 @@ class GtkBaseGUI(BaseGUI):
             if action.get('type', 'button') == 'button':
                 widget = gtk.Button(label=action.get('label', 'OK'))
                 event = "clicked"
-            elif action['type'] == 'checkbox':
-                widget = gtk.CheckButton(label=action.get('label', '?'))
-                if action.get('checked'):
-                    widget.set_active(True)
-                event = "toggled"
+#
+# Disabled for now - what was supposed to happen when the box was ticked
+# or unticked was never really resolved in a satisfactory way.
+#
+#           elif action['type'] == 'checkbox':
+#               widget = gtk.CheckButton(label=action.get('label', '?'))
+#               if action.get('checked'):
+#                   widget.set_active(True)
+#               event = "toggled"
+#
             else:
-                raise NotImplementedError('We only have buttons atm.')
+                raise NotImplementedError('We only have buttons ATM!')
 
             if action.get('position', 'left') in ('first', 'left', 'top'):
                 button_box.pack_start(widget, False, True)
