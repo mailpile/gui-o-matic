@@ -116,12 +116,12 @@ class BaseGUI(object):
             path = self.config['images'][path.split(':', 1)[1]]
         return os.path.abspath(path.replace('%(theme)s', self.ICON_THEME))
 
-    def _add_menu_item(self, item='item', label='Menu item', sensitive=False,
+    def _add_menu_item(self, id='item', label='Menu item', sensitive=False,
                              op=None, args=None, **ignored_kwargs):
         pass
 
     def _create_menu_from_config(self):
-        menu = self.config.get('indicator', {}).get('menu', [])
+        menu = self.config.get('indicator', {}).get('menu_items', [])
         for item_info in menu:
             self._add_menu_item(**item_info)
 
@@ -131,14 +131,11 @@ class BaseGUI(object):
     def quit(self):
         raise KeyboardInterrupt("User quit")
 
-    def set_item_label(self, item=None, label=None):
+    def set_item(self, item=None, label=None, sensitive=None):
         pass
 
-    def set_item_sensitive(self, item=None, sensitive=True):
-        pass
-
-    def set_substatus(self,
-            substatus=None, label=None, hint=None, icon=None, color=None):
+    def set_status_display(self,
+            id=None, title=None, details=None, icon=None, color=None):
         pass
 
     def update_splash_screen(self, message=None, progress=None):

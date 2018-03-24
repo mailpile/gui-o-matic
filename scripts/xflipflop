@@ -26,10 +26,10 @@ export ROTATE_TOUCH_INVERTED="$DEV_TOUCH |xargs -L 1 -I DEV xinput set-prop DEV 
         "app_id": "xflipflop",
         "images": {"startup": "$ICON"},
         "indicator": {
-            "menu": [
+            "menu_items": [
                 {
+                    "id": "laptop",
                     "label": "Laptop",
-                    "item": "laptop",
                     "op": "shell",
                     "args": ["xrandr -o normal",
                              "xdg-screensaver resume $ROOTWINID || true",
@@ -37,8 +37,8 @@ export ROTATE_TOUCH_INVERTED="$DEV_TOUCH |xargs -L 1 -I DEV xinput set-prop DEV 
                              "$NOTIFY 'Laptop mode; disabled touchscreen'"],
                     "sensitive": true
                 },{
+                    "id": "tablet",
                     "label": "Tablet",
-                    "item": "tablet",
                     "op": "shell",
                     "args": ["xrandr -o left",
                              "xdg-screensaver suspend $ROOTWINID || true",
@@ -47,8 +47,8 @@ export ROTATE_TOUCH_INVERTED="$DEV_TOUCH |xargs -L 1 -I DEV xinput set-prop DEV 
                              "$NOTIFY 'Tablet mode; touchscreen only'"],
                     "sensitive": true
                 },{
+                    "id": "tablet",
                     "label": "Tent",
-                    "item": "tablet",
                     "op": "shell",
                     "args": ["xrandr -o inverted",
                              "xdg-screensaver suspend $ROOTWINID || true",
@@ -57,8 +57,8 @@ export ROTATE_TOUCH_INVERTED="$DEV_TOUCH |xargs -L 1 -I DEV xinput set-prop DEV 
                              "$NOTIFY 'Tent mode; touchscreen only'"],
                     "sensitive": true
                 },{
+                    "id": "tv",
                     "label": "Video",
-                    "item": "tv",
                     "op": "shell",
                     "args": ["xrandr -o normal",
                              "xdg-screensaver suspend $ROOTWINID || true",
@@ -67,8 +67,8 @@ export ROTATE_TOUCH_INVERTED="$DEV_TOUCH |xargs -L 1 -I DEV xinput set-prop DEV 
                              "$NOTIFY 'Video mode; touchscreen only'"],
                     "sensitive": true
                 },{
+                    "id": "tv",
                     "label": "Everything",
-                    "item": "tv",
                     "op": "shell",
                     "args": ["xrandr -o normal", "$ENABLE_DEVICES",
                              "xdg-screensaver resume $ROOTWINID || true",

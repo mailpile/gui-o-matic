@@ -1,6 +1,6 @@
 # GUI-o-Matic!
 
-This is a tool for creating minimal graphical user interfaces; usually
+This is a tool for creating minimal graphical user interfaces; maybe
 just a splash screen and an indicator icon with a drop-down menu.
 
 The tool is inspired by `dialog` and other similar command-line
@@ -54,16 +54,19 @@ platforms, please consider helping out!
 
 ## User Interface
 
-GUI-o-Matic currently allows creation of the following UI elements and
-behaviours:
+GUI-o-Matic currently allows creation of the following UI elements:
 
-   * Splash screen with progress bar
-   * Simple main window with buttons and graphics
+   * Splash screen with progress bar and status
+   * Simple main window with graphics, buttons and status messages
    * Indicator with mutable icon and drop-down menu
-   * Open URLs in browser
-   * Load URLs in background
+
+When the user interacts with the GUI (clicks a button or a menu item),
+the following actions can be triggered:
+
+   * Open URLs in the user's browser
    * Launch apps in terminal windows
-   * Run shell commands in background
+   * Make HTTP GET/POST requests in the background (REST API calls?)
+   * Run shell commands in the background
 
 Planned features:
 

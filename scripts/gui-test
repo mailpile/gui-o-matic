@@ -16,67 +16,60 @@ export PARPID=$$
     },
     "main_window": {
         "show": false,
-        "message": "Hello world!\\nThis is my message for you.",
         "close_quits": true,
         "width": 480,
         "height": 360,
-        "image": "$BASEDIR/img/gt-wallpaper.png",
-        "actions": [
+        "background": "$BASEDIR/img/gt-wallpaper.png",
+        "initial_notification": "Hello world!\\nThis is my message for you.",
+        "action_items": [
             {
-                "position": "first",
+                "id": "btn-xkcd",
                 "label": "XKCD",
-                "item": "btn-xkcd",
+                "position": "first",
+                "sensitive": false,
                 "op": "show_url",
-                "args": ["https://xkcd.com/"],
-                "sensitive": false
+                "args": "https://xkcd.com/"
             },{
-                "position": "first",
+                "id": "mp",
                 "label": "Mailpile?",
-                "item": "mp",
-                "op": "terminal",
-                "args": {"command": "screen -x -r mailpile || screen"},
-                "sensitive": true
-            },{
                 "position": "first",
-                "type": "checkbox",
-                "label": "Enable World Peace",
-                "item": "ewp",
-                "op": "shell",
-                "args": ["echo woop woop"],
-                "sensitive": true
+                "sensitive": true,
+                "op": "terminal",
+                "args": {"command": "screen -x -r mailpile || screen"}
             },{
-                "position": "last",
+                "id": "quit",
                 "label": "Quit",
-                "item": "quit",
-                "op": "quit",
-                "sensitive": true
+                "position": "last",
+                "sensitive": true,
+                "op": "quit"
             }
         ]
     },
     "indicator": {
-        "menu": [
+        "initial_status": "startup",
+        "menu_items": [
             {
-                "label": "Indicator test",
-                "item": "info"
+                "id": "info",
+                "label": "Indicator test"
             },{
+                "id": "menu-xkcd",
                 "label": "XKCD",
-                "item": "menu-xkcd",
+                "sensitive": false,
                 "op": "show_url",
-                "args": ["https://xkcd.com/"],
-                "sensitive": false
+                "args": ["https://xkcd.com/"]
             },{
+                "id": "mailpile",
                 "label": "Mailpile",
-                "item": "mailpile",
+                "sensitive": true,
                 "op": "show_url",
-                "args": ["https://www.mailpile.is/"],
-                "sensitive": true
+                "args": ["https://www.mailpile.is/"]
             }
         ]
     }
 }
 OK LISTEN
 tac
-echo 'show_splash_screen {"image": "'"$BASEDIR"'/img/gt-splash.png", "message": "Hello world!", "progress_bar": true}'
+echo 'show_splash_screen {"background": "'"$BASEDIR"'/img/gt-splash.png", "message": "Hello world!", "progress_bar": true}'
 
 sleep 2
 echo 'update_splash_screen {"progress": 0.2}'
@@ -85,8 +78,8 @@ echo 'set_status {"status": "normal"}'
 sleep 2
 echo 'update_splash_screen {"progress": 0.5, "message": "Woohooooo"}'
 echo 'update_splash_screen {"progress": 0.5}'
-echo 'set_item_sensitive {"item": "menu-xkcd"}'
-echo 'set_item_sensitive {"item": "btn-xkcd"}'
+echo 'set_item {"id": "menu-xkcd", "sensitive": true}'
+echo 'set_item {"id": "btn-xkcd", "sensitive": true}'
 echo 'notify_user {"message": "This is a notification"}'
 echo 'notify_user {"message": "This is a popup notification", "popup": true}'
 
@@ -99,8 +92,8 @@ echo 'show_main_window {}'
 echo 'set_status {"status": "attention"}'
 
 sleep 2
-echo 'set_item_label {"item": "menu-xkcd", "label": "No really, XKCD"}'
-echo 'set_item_label {"item": "btn-xkcd", "label": "XKCDonk"}'
+echo 'set_item {"id": "menu-xkcd", "label": "No really, XKCD"}'
+echo 'set_item {"id": "btn-xkcd", "label": "XKCDonk"}'
 
 sleep 30
 echo 'set_status {"status": "shutdown"}'

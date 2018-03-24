@@ -38,7 +38,7 @@ class MacOSXGUI(BaseGUI):
         self.callbacks = {}
         self._create_menu_from_config()
 
-    def _add_menu_item(self, item='item', label='Menu item',
+    def _add_menu_item(self, id='item', label='Menu item',
                              sensitive=False,
                              op=None, args=None,
                              **ignored_kwarg):
@@ -47,11 +47,11 @@ class MacOSXGUI(BaseGUI):
             label, 'activate:', '')
         menuitem.setEnabled_(sensitive)
         self.menu.addItem_(menuitem)
-        self.items[item] = menuitem
+        self.items[id] = menuitem
         if op:
             def activate(o, a):
                 return lambda: self._do(o, a)
-            self.callbacks[item] = activate(op, args or [])
+            self.callbacks[id] = activate(op, args or [])
 
     def _ind_setup(self):
         # Create the statusbar item
@@ -75,13 +75,11 @@ class MacOSXGUI(BaseGUI):
     def set_status(self, status='startup'):
         self.ind.setImage_(self.images.get(status, self.images['normal']))
 
-    def set_item_label(self, item=None, label=None):
-        if item and item in self.items:
-            self.items[item].setTitle_(label)
-
-    def set_item_sensitive(self, item=None, sensitive=True):
-        if item and item in self.items:
-            self.items[item].setEnabled_(sensitive)
+    def set_item(self, id=None, label=None, sensitive=None):
+        if label is not None and id and id in self.items:
+            self.items[id].setTitle_(label)
+        if sensitive is not None and id and id in self.items:
+            self.items[id].setEnabled_(sensitive)
 
     def notify_user(self, message=None, popup=False):
         pass  # FIXME

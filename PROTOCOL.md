@@ -91,22 +91,22 @@ In `font_styles`, we define font styles used in different parts of the app.
 
     ...
         "font_styles": {
-            # Style used by labels in the main window
-            "label": {
+            # Style used by status display titles in the main window
+            "title": {
                 "family": "normal",
                 "points": 18,
                 "bold": True
             },
 
-            # Style used by hints (sub-labels) in the main window
-            "hint": {
+            # Style used by status display details in the main window
+            "details": {
                 "points": 10,
                 "italic": True
             },
 
-            # The main-window may have a standalone status element, for
-            # messages that don't go anywhere else.
-            "status": { ... },
+            # The main-window may have a standalone notification element,
+            # for messages that don't go anywhere else.
+            "notification": { ... },
 
             # The progress reporting label on the splash screen
             "splash": { ... }
@@ -116,7 +116,7 @@ In `font_styles`, we define font styles used in different parts of the app.
 The `main_window` section defines the main app window. The main app window has
 the following elements:
 
-   * Substatuses (an icon, a text label and a text hint/description)
+   * Status displays (an icon and some text: title + details)
    * Actions (buttons or menu items)
    * A notification display element (text label)
    * A background image
@@ -142,13 +142,13 @@ some of the actions to a hamburger "overflow" menu.
             "height": 330,
 
             # Background image.  May be ignored on some platforms.
-            "image": "image:background",
+            "background": "image:background",
 
-            # Default status label text
-            "status": "",
+            # Default notification label text
+            "initial_notification": "",
     ...
 
-The `substatus` elements in the main window are used to communicate both visual
+The `status_displays` in the main window are used to communicate both visual
 and textual clues about different things. Each consists of an icon, a main
 label and a hint. The values provided are defaults, all are likely to change
 later on. The GUI backend has a fair bit of freedom in how it renders these,
@@ -156,17 +156,17 @@ but order should be preserved and labels should be made more prominent than
 hints.
 
     ...
-            "substatus": [
+            "status_displays": [
                 {
-                    "item": "internal-identifying-name",
+                    "id": "internal-identifying-name",
                     "icon": "image:something",
-                    "label": "Hello world!",
-                    "hint": "Greetings and salutations to all!"
+                    "title": "Hello world!",
+                    "details": "Greetings and salutations to all!"
                 },{
-                    "item": "id2",
+                    "id": "id2",
                     "icon": "/path/to/some/icon.png",
-                    "label": "Launching Frobnicator",
-                    "hint": "The beginning and end of all things"
+                    "title": "Launching Frobnicator",
+                    "details": "The beginning and end of all things"
                 }
             ],
     ...
@@ -193,14 +193,14 @@ clarifications on these ops and their arguments.
     ...
             "actions": [
                 {
-                    "item": "open",
+                    "id": "open",
                     "type": "button",  # button is the default
                     "position": "first",
                     "label": "Open",
                     "op": "show_url",
                     "args": "http://www.google.com/"
                 },{
-                    "item": "evil666",
+                    "id": "evil666",
                     "position": "last",
                     "label": "Harakiri",
                     "op": "shell",
@@ -228,24 +228,24 @@ Menu items may also be separators, which in most environments draws a
 horizontal dividor. Environments not supporting that may use a blank menu
 item instead, or omit, as deemed appropriate.
 
-Within these menus, the `item`, `op` and `args` fields have the same
+Within these menus, the `id`, `op` and `args` fields have the same
 meanings and function as they do in the main window actions. Configuration
-writes should take care to avoid collissions when chosing `item` names.
+writes should take care to avoid collissions when chosing item IDs.
 
-An `item` named `status` is special and should receive text updates from
-the `notify_user` method.
+An menu item with the ID `notification` is special and should receive text
+updates from the `notify_user` method.
 
         "indicator": {
             "initial_status": "startup",  # Should match an icon
-            "menu": [
+            "menu_items": [
                 {
-                    "item": "status",
+                    "id": "notification",
                     "label": "Starting up!",
                     "sensitive": False
                 },{
                     "separator": True
                 },{
-                    "item": "xkcd",
+                    "id": "xkcd",
                     "label": "XKCD is great",
                     "op": "show_url",
                     "args": "https://xkcd.com/"
@@ -404,7 +404,7 @@ A description of the existing commands follows; see also
 
 Arguments:
 
-   * image: (string) path to a background image file
+   * background: (string) path to a background image file
    * message: (string) initial status message
    * progress_bar: (bool) display a progress bar?
 
@@ -446,40 +446,35 @@ Sets the overall "status" of the application, which will be displayed by
 changing an indicator icon somewhere within the app. All statuses should
 have an icon defined in the `images: { ... }` section of the configuration.
 
-### set_substatus
+### set_status_display
 
 Arguments:
 
-   * substatus: (string) The ID of the substatus section
-   * label: (optional string) Updated text for the main label
-   * hint: (optional string) Updated text for the hint label
+   * id: (string) The ID of the status display section
+   * title: (optional string) Updated text for the title label
+   * details: (optional string) Updated text for the details label
    * icon: (optional string) FS path or reference to an entry in `images`
    * color: (optional #rgb/#rrggbb string) Color for label text
 
-This will update some or all of the elements of one of the substatus
+This will update some or all of the elements of one of the status display
 sections in the main window.
 
-### set_item_label
+### set_item
 
 Arguments:
 
-   * item: (string) The item ID as defined in the configuration
-   * label: (string) A new label!
+   * id: (string) The item ID as defined in the configuration
+   * label: (optional string) A new label!
+   * sensitive: (optional bool) Make item senstive (default) or insensitive
 
 This can be used to change the labels displayed in the indicator menu
 (the `indicator: menu: [ ... ]` section of the configuration).
 
-### set_item_sensitive
-
-Arguments:
-
-   * item: (string) The item ID as defined in the configuration
-   * sensitive: (optional bool) Make item senstive (default) or insensitive
-
-This can be used to change the sensitivity of one of the entries in the
+This can also be used to change the sensitivity of one of the entries in the
 indicator menu (the `indicator: menu: [ ... ]` section of the config).
 Insensitive items are greyed out but should still be displayed, as apps
 may choose to use the to communicate low-priority information to the user.
+
 
 ### set_next_error_message
 
