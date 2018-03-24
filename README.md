@@ -19,7 +19,7 @@ expected to expose web- or terminal interfaces which GUI-o-Matic can
 launch as necessary.
 
 When used without a worker, GUI-o-Matic can provide easy point-and-click
-access to shell commands or URLs (see [example scripts][./scripts/]).
+access to shell commands or URLs (see [example scripts](./scripts/)).
 
 Initally written as part of [Mailpile](https://www.mailpile.is/), this
 app is released separately so other projects can make use of it.

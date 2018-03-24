@@ -99,7 +99,7 @@ In `font_styles`, we define font styles used in different parts of the app.
             },
 
             # Style used by hints (sub-labels) in the main window
-            "label": {
+            "hint": {
                 "points": 10,
                 "italic": True
             },
