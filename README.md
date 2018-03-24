@@ -92,7 +92,7 @@ single JSON structure for arguments. Examples:
 
     update_splash_screen {"progress": 0.2, "message": "Yaaay"}
 
-    set_item_label {"item": "frobnicator", "label": "FROB IT"}
+    set_item {"id": "frobnicator", "label": "FROB IT"}
 
     notify_user {"message": "Hello World!"}
 
