@@ -15,24 +15,28 @@ import PIL.Image
 import os
 import uuid
 import traceback
+import atexit
+import itertools
 
 from gui_o_matic.gui.base import BaseGUI
 
 
+
 class Image( object ):
     '''
-    Helper class for importing arbitrary graphics to winapi bitmaps
+    Helper class for importing arbitrary graphics to winapi bitmaps. Mode is a
+    tuple of (winapi image type, file extension, and cleanup callback).
     '''
 
     @classmethod
     def Bitmap( cls, path, size = None ):
-        return cls( path, size, mode = (win32con.IMAGE_BMP,'bmp'))
+        return cls( path, size, mode = (win32con.IMAGE_BMP,'bmp',win32gui.DeleteObject))
 
     # https://blog.barthe.ph/2009/07/17/wmseticon/
     #
     @classmethod
     def Icon( cls, path, size ):
-        return cls( path, mode = (win32con.IMAGE_ICON,'ico'), size = size )
+        return cls( path, mode = (win32con.IMAGE_ICON,'ico',win32gui.DestroyIcon), size = size )
 
     @classmethod
     def IconLarge( cls, path ):
@@ -73,6 +77,66 @@ class Image( object ):
         finally:
             os.unlink( filename )
 
+    def __del__( self ):
+        # TODO: swap mode to a more descriptive structure
+        #
+        #self.mode[2]( self.handle )
+        pass
+
+
+
+class Action( object ):
+    '''
+    Class binding a string id to numeric id, op, and action, allowing
+    WM_COMMAND etc to be easily mapped to gui-o-matic protocol elements.
+    '''
+
+    # Generate ids per action--Windows recommends we avoid low IDs
+    #
+    _base_gui_id = 1024
+
+    # Registry of actions, by id
+    #
+    _actions = {}
+
+    @classmethod
+    def register( cls, action ):
+        '''
+        Generate and associate an id with the given action
+        '''
+        action._gui_id = cls._base_gui_id
+        cls._actions[ action._gui_id ] = action
+        cls._base_gui_id += 1
+            
+    @classmethod
+    def byId( cls, gui_id ):
+        '''
+        Get a registered action by id, probably for invoking it.
+        '''
+        return cls._actions[ gui_id ]
+
+    def __init__( self, gui, identifier, label, operation = None, sensitive = False, args = None ):
+        '''
+        Bind the action state to the gui for later invocation or modification.
+        '''
+        self.gui = gui
+        self.identifier = identifier
+        self.label = label
+        self.operation = operation
+        self.sensitive = sensitive
+        self.args = args
+        self.register( self )
+
+    def get_id( self ):
+        return self._gui_id
+
+    def __call__( self ):
+        '''
+        Apply the bound action arguments
+        '''
+        assert( self.sensitive )
+        self.gui._do( op = self.operation, args = self.args )
+
 
 class Window( object ):
     '''
@@ -88,6 +152,10 @@ class Window( object ):
     #
     splash_screen_style = win32con.WS_POPUP
 
+    # Window styel for systray
+    #
+    systray_style = win32con.WS_OVERLAPPED | win32con.WS_SYSMENU
+    
     _next_window_class_id = 0
 
     @classmethod
@@ -96,10 +164,16 @@ class Window( object ):
         cls._next_window_class_id += 1
         return result
 
-    def __init__(self, title, width, height, style, icon = None, messages = {} ):
+    _notify_event_id = win32con.WM_USER + 22
+
+    def __init__(self, title, style,
+                 width = win32con.CW_USEDEFAULT,
+                 height = win32con.CW_USEDEFAULT,
+                 messages = {}):
         '''Setup a window class and a create window'''
         self.module_handle = win32gui.GetModuleHandle(None)
-
+        self.systray = False
+        
         # Setup window class
         #
         self.window_class_name = self._make_window_class_name()
@@ -107,6 +181,7 @@ class Window( object ):
              win32con.WM_PAINT: self._on_paint,
              win32con.WM_CLOSE: self._on_close,
              win32con.WM_COMMAND: self._on_command,
+             self._notify_event_id: self._on_notify,
              }
         self.message_map.update( messages )
 
@@ -114,8 +189,6 @@ class Window( object ):
         self.window_class.style = win32con.CS_HREDRAW | win32con.CS_VREDRAW
         self.window_class.lpfnWndProc = self.message_map
         self.window_class.hInstance = self.module_handle
-        if icon:
-            self.window_class.hIcon = icon
         self.window_class.hCursor = win32gui.LoadCursor( None, win32con.IDC_ARROW )
         self.window_class.hbrBackground = win32con.COLOR_WINDOW
         self.window_class.lpszClassName = self.window_class_name
@@ -134,7 +207,7 @@ class Window( object ):
             None,
             self.module_handle,
             None )
-
+        
     def set_visibility( self, visibility  ):
         state = win32con.SW_SHOW if visibility else win32con.SW_HIDE
         win32gui.ShowWindow( self.window_handle, state )
@@ -153,8 +226,69 @@ class Window( object ):
                              win32con.ICON_SMALL,
                              small_icon.handle )
 
+    def set_systray( self, small_icon = None, text = '' ):
+        if small_icon:
+            message = win32gui.NIM_MODIFY if self.systray else win32gui.NIM_ADD
+            data = (self.window_handle,
+                          0,
+                          win32gui.NIF_ICON | win32gui.NIF_MESSAGE | win32gui.NIF_TIP,
+                          self._notify_event_id,
+                          small_icon.handle,
+                          text)
+        elif self.systray:
+            message = win32gui.NIM_DELETE
+            data = (self.window_handle, 0)
+        else:
+            message = None
+            data = tuple()
+
+        lookup = {
+            win32gui.NIM_MODIFY: "modify",
+            win32gui.NIM_ADD: "add",
+            win32gui.NIM_DELETE: "delete",
+            None: 'no-op'
+        }
+        print( "{}: {}".format( lookup[ message ], data ) )
+
+        self.systray = True if small_icon else False
+
+        if message is not None:
+            win32gui.Shell_NotifyIcon( message, data )
+
+    def set_menu( self, actions ):
+        self.menu_actions = actions
+
     def _on_command( self, window_handle, message, wparam, lparam ):
-         return 0
+        action_id = win32gui.LOWORD(wparam)
+        print( "command {}".format( action_id ) )
+        action = Action.byId( action_id )
+        action()
+        return 0
+
+    def _on_notify( self, window_handle, message, wparam, lparam  ):
+        if lparam == win32con.WM_RBUTTONDOWN:
+            self._show_menu()
+        return True
+
+    def _show_menu( self ):
+        menu = win32gui.CreatePopupMenu()
+        for action in self.menu_actions:
+            flags = win32con.MF_STRING
+            if not action.sensitive:
+                flags |= win32con.MF_GRAYED
+            win32gui.AppendMenu( menu, flags, action.get_id(), action.label )
+        
+        pos = win32gui.GetCursorPos()
+        
+        win32gui.SetForegroundWindow( self.window_handle )
+        win32gui.TrackPopupMenu( menu,
+                                 win32con.TPM_LEFTALIGN | win32con.TPM_BOTTOMALIGN,
+                                 pos[ 0 ],
+                                 pos[ 1 ],
+                                 0,
+                                 self.window_handle,
+                                 None )
+        win32gui.PostMessage( self.window_handle, win32con.WM_NULL, 0, 0 )
 
     def _on_paint( self, window_handle, message, wparam, lparam ):
         (hdc, paintStruct) = win32gui.BeginPaint( self.window_handle )
@@ -169,6 +303,11 @@ class Window( object ):
     def _on_close( self, window_handle, message, wparam, lparam ):
         self.set_visibility( False )
         return 0
+
+    def __del__( self ):
+        self.set_systray( None, None )
+        win32gui.DestroyWindow( self.window_handle )
+        win32gui.UnregisterClass( self.window_class_name, self.window_class )
 
     def close( self ):
         self.onClose()
@@ -212,59 +351,6 @@ class WinapiGUI(BaseGUI):
         id, and catch/map associated WM_COMMAND event back to actions. This
         allows us to toggle sensitivity, replace text, etc.
     """
-    class Action( object ):
-        '''
-        Class binding a string id to numeric id, op, and action, allowing
-        WM_COMMAND etc to be easily mapped to gui-o-matic protocol elements.
-        '''
-
-        # Generate ids per action--Windows recommends we avoid low IDs
-        #
-        _base_gui_id = 1024
-
-        # Registry of actions, by id
-        #
-        _actions = {}
-
-        @classmethod
-        def register( cls, action ):
-            '''
-            Generate and associate an id with the given action
-            '''
-            action._gui_id = cls._base_gui_id
-            cls._actions[ action._gui_id ] = action
-            cls._base_gui_id += 1
-            
-        @classmethod
-        def byId( cls, gui_id ):
-            '''
-            Get a registered action by id, probably for invoking it.
-            '''
-            return cls._actions[ gui_id ]
-
-        def __init__( self, gui, identifier, label, operation, sensitive, args ):
-            '''
-            Bind the action state to the gui for later invocation or modification.
-            '''
-            self.gui = gui
-            self.identifier = identifier,
-            self.label = label
-            self.operation = operation
-            self.sensitive = sensitive
-            self.args = args
-            self.register( self )
-
-        def get_id( self ):
-            return self._gui_id
-
-        def __call__( self ):
-            '''
-            Apply the bound action arguments
-            '''
-            assert( self.sensitive )
-            self.gui._do( op = self.operation, args = self.args )
-
-
 
     _variable_re = re.compile( "%\(([\w]+)\)s" )
 
@@ -288,6 +374,7 @@ class WinapiGUI(BaseGUI):
         self.variables = variables
         self.ready = False
         self.statuses = {}
+        self.items = {}
 
     def run( self ):
         '''
@@ -298,30 +385,55 @@ class WinapiGUI(BaseGUI):
         self.appid = unicode( uuid.uuid4() )
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(self.appid)
         win32gui.InitCommonControls()
+
+        items = itertools.chain( self.config['indicator']['menu'],
+                                 self.config['main_window']['actions'] )
+        for item in items:
+            action = Action( self,
+                             identifier = item['item'],
+                             label = item['label'],
+                             operation = item.get('op'),
+                             args = item.get('args'),
+                             sensitive = item.get('sensitive', False))
+            self.items[action.identifier] = action
+
+        self.systray_window = Window(title = self.config['app_name'],
+                                     style = Window.systray_style)
+
+        menu_items = [ self.items[ item['item'] ] for item in self.config['indicator']['menu'] ]
+        self.systray_window.set_menu( menu_items )
         
-        # Stub code!
         self.main_window = Window(title = self.config['app_name'],
+                                  style = Window.main_window_style,
                                   width = self.config['main_window']['width'],
-                                  height = self.config['main_window']['height'],
-                                  style = Window.main_window_style)
+                                  height = self.config['main_window']['height'])
         
         self.main_window.set_visibility( self.config['main_window']['show'] )
         
         self.splash_screen = Window(title = self.config['app_name'],
+                                    style = Window.splash_screen_style,
                                     width = self.config['main_window']['width'],
-                                    height = self.config['main_window']['height'],
-                                    style = Window.splash_screen_style)
+                                    height = self.config['main_window']['height'])
 
-        self.windows = [ self.main_window, self.splash_screen ]
+
+        self.windows = [ self.main_window,
+                         self.splash_screen,
+                         self.systray_window ]
+
         self.set_status( 'normal' )
+
+        #FIXME: Does not run!
+        #
+        @atexit.register
+        def cleanup_context():
+            print( "cleanup" )
+            self.systray_window.set_systray( None, None )
+            win32gui.PostQuitMessage(0)
 
         # Enter run loop
         #
         self.ready = True
-        try:
-            win32gui.PumpMessages()
-        finally:
-            win32gui.PostQuitMessage(0)
+        win32gui.PumpMessages()
         
     def terminal(self, command='/bin/bash', title=None, icon=None):
         print( "FIXME: Terminal not supported!" )
@@ -338,6 +450,9 @@ class WinapiGUI(BaseGUI):
         for window in self.windows:
             window.set_icon( small_icon, large_icon )
 
+        systray_hover_text = self.config['app_name'] + ": " + status
+        self.systray_window.set_systray( small_icon, systray_hover_text )
+
         print('STATUS: %s' % status)
 
     def quit(self):
@@ -345,13 +460,12 @@ class WinapiGUI(BaseGUI):
         raise KeyboardInterrupt("User quit")
 
     def set_item_label(self, item=None, label=None):
-        pass
+        self.items[item].label = label
 
     def set_item_sensitive(self, item=None, sensitive=True):
-        pass
-
-    def set_substatus(self,
-            substatus=None, label=None, hint=None, icon=None, color=None):
+        self.items[item].sensitive = sensitive
+        
+    def set_substatus(self, substatus=None, label=None, hint=None, icon=None, color=None):
         pass
 
     def update_splash_screen(self, message=None, progress=None):
