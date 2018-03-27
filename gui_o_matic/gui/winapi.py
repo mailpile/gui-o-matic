@@ -5,6 +5,8 @@ import win32api
 import win32con
 import win32gui
 import win32gui_struct
+import win32ui
+import commctrl
 import ctypes
 
 # Utility imports
@@ -17,6 +19,7 @@ import uuid
 import traceback
 import atexit
 import itertools
+import struct
 
 from gui_o_matic.gui.base import BaseGUI
 
@@ -29,40 +32,90 @@ class Image( object ):
     '''
 
     @classmethod
-    def Bitmap( cls, path, size = None ):
-        return cls( path, size, mode = (win32con.IMAGE_BMP,'bmp',win32gui.DeleteObject))
+    def Bitmap( cls, *args, **kwargs ):
+        mode = (win32con.IMAGE_BITMAP,'bmp',win32gui.DeleteObject)
+        return cls( *args, mode = mode, **kwargs )
 
     # https://blog.barthe.ph/2009/07/17/wmseticon/
     #
     @classmethod
-    def Icon( cls, path, size ):
-        return cls( path, mode = (win32con.IMAGE_ICON,'ico',win32gui.DestroyIcon), size = size )
+    def Icon( cls, *args, **kwargs ):
+        mode = (win32con.IMAGE_ICON,'ico',win32gui.DestroyIcon)
+        return cls( *args, mode = mode, **kwargs )
 
     @classmethod
-    def IconLarge( cls, path ):
+    def IconLarge( cls, *args, **kwargs ):
         dims =(win32con.SM_CXICON, win32con.SM_CYICON)
         size = tuple(map(win32api.GetSystemMetrics,dims))
-        return cls.Icon( path, size )
+        return cls.Icon( *args, size = size, **kwargs )
 
     @classmethod
-    def IconSmall( cls, path ):
+    def IconSmall( cls, *args, **kwargs ):
         dims =(win32con.SM_CXSMICON, win32con.SM_CYSMICON)
         size = tuple(map(win32api.GetSystemMetrics,dims))
-        return cls.Icon( path, size )
+        return cls.Icon( *args, size = size, **kwargs )
 
-    def __init__( self, path, mode, size = None ):
+    @staticmethod
+    def _winapi_bitmap( source ):
+        '''
+        try to create a bitmap in memory
+
+        NOTE: Doesn't work! Maybe troubleshoot more later...
+        '''
+        assert( source.mode == 'RGBA' )
+        bitmap = win32gui.CreateBitmap( source.width,
+                                      source.height,
+                                      1,
+                                      32,
+                                      None )
+        hdc = win32gui.GetDC( None )
+        hdc_mem = win32gui.CreateCompatibleDC( hdc )
+        prior = win32gui.SelectObject( hdc_mem, bitmap )
+
+        pixels = source.load()
+
+        for x in range( source.width ):
+            for y in range( source.height ):
+                pixel = struct.pack( '@BBBB', *pixels[ x, y ] )
+                #pixel = struct.pack('@BBBB', 0, 0, 0, 0 )
+                color = struct.unpack("@i", pixel )[ 0 ]
+                print "{} {} {}".format( x, y, color )
+                brush = win32gui.CreateSolidBrush( color )
+                win32gui.FillRect( hdc_mem, ( x, y, 1, 1 ), brush )
+
+        print "done!"
+
+        win32gui.SelectObject( hdc_mem, prior )
+        win32gui.DeleteDC( hdc_mem )
+        win32gui.ReleaseDC( None, hdc )
+        
+        return bitmap
+
+    def __init__( self, path, mode, size = None, debug = None ):
+        '''
+        Load the image into memory, with appropriate conversions.
+
+        size:
+          None: use image size
+          number: scale image size
+          tuple: transform image size
+        '''
         source = PIL.Image.open( path )
         if source.mode != 'RGBA':
             source = source.convert( 'RGBA' )
         if size:
-            factor = float(max( size )) / max( source.size )
-            new_size = tuple([ int(factor * dim) for dim in source.size ])
-            source = source.resize( new_size, PIL.Image.LANCZOS )
-            source.thumbnail( size, PIL.Image.ANTIALIAS )
+            if not hasattr( size, '__len__' ):
+                factor = float( size ) / max( source.size )
+                size = tuple([ int(factor * dim) for dim in source.size ])
+            source = source.resize( size, PIL.Image.ANTIALIAS )
+            #source.thumbnail( size, PIL.Image.ANTIALIAS )
 
         self.size = source.size
         self.mode = mode
-            
+
+        if debug:
+            source.save( debug, mode[ 1 ] )
+        
         with tempfile.NamedTemporaryFile( delete = False ) as handle:
             filename = handle.name
             source.save( handle, mode[ 1 ] )
@@ -73,7 +126,7 @@ class Image( object ):
                                               mode[ 0 ],
                                               source.width,
                                               source.height,
-                                              win32con.LR_LOADFROMFILE )
+                                              win32con.LR_LOADFROMFILE | win32con.LR_CREATEDIBSECTION )
         finally:
             os.unlink( filename )
 
@@ -158,6 +211,104 @@ class Window( object ):
     
     _next_window_class_id = 0
 
+    class Layer( object ):
+
+        def __call__( self, window, hdc, paint_struct ):
+            raise NotImplementedError
+
+    class BitmapLayer( Layer ):
+
+        def __init__( self, bitmap, src_roi = None, dst_roi = None, blend = None ):
+            self.bitmap = bitmap
+            self.src_roi = src_roi
+            self.dst_roi = dst_roi
+            self.blend = blend
+            
+
+        def __call__( self, window, hdc, paint_struct ):
+            src_roi = self.src_roi or (0, 0, self.bitmap.size[0], self.bitmap.size[1])
+            dst_roi = self.dst_roi or win32gui.GetClientRect( window.window_handle )
+            blend = self.blend or (win32con.AC_SRC_OVER, 0, 255, win32con.AC_SRC_ALPHA )
+
+            hdc_mem = win32gui.CreateCompatibleDC( hdc )
+            prior = win32gui.SelectObject( hdc_mem, self.bitmap.handle )
+
+            print( (src_roi,dst_roi,blend) )
+
+            win32gui.AlphaBlend( hdc,
+                                 dst_roi[ 0 ],
+                                 dst_roi[ 1 ],
+                                 dst_roi[ 2 ],
+                                 dst_roi[ 3 ],
+                                 hdc_mem,
+                                 src_roi[ 0 ],
+                                 src_roi[ 1 ],
+                                 src_roi[ 2 ],
+                                 src_roi[ 3 ],
+                                 blend )
+            
+            win32gui.SelectObject( hdc_mem, prior )
+            win32gui.DeleteDC( hdc_mem )
+
+
+    class TextLayer( Layer ):
+
+        def __init__( self, message, rect, style = win32con.DT_SINGLELINE | win32con.DT_NOCLIP ):
+            #win32gui.FillRect( hdc, paintStruct[2], win32con.COLOR_WINDOW )
+            self.message = message
+            self.rect = rect
+            self.style = style
+
+        def __call__( self, window, hdc, paint_struct ):
+            win32gui.DrawText( hdc,
+                               self.message,
+                               len( self.message ),
+                               self.rect,
+                               self.style )
+
+    class Control( object ):
+
+        _next_control_id = 1024
+
+        @classmethod
+        def _allocate_control_id( cls ):
+            result = cls._next_control_id
+            cls._next_control_id += 1
+            return result
+
+    class ProgressBar( Control ):
+        # https://msdn.microsoft.com/en-us/library/windows/desktop/hh298373(v=vs.85).aspx
+        #
+        def __init__( self, parent ):
+            rect = win32gui.GetClientRect( parent.window_handle )
+            yscroll = win32api.GetSystemMetrics(win32con.SM_CYVSCROLL)
+            self.handle = win32gui.CreateWindowEx( 0,
+                                                   commctrl.PROGRESS_CLASS,
+                                                   None,
+                                                   win32con.WS_VISIBLE | win32con.WS_CHILD,
+                                                   rect[ 0 ] + yscroll,
+                                                   (rect[ 3 ]) - 2 * yscroll,
+                                                   (rect[ 2 ] - rect[ 0 ]) - 2*yscroll,
+                                                   yscroll,
+                                                   parent.window_handle,
+                                                   None,
+                                                   win32gui.GetModuleHandle(None),
+                                                   None )
+
+        def __del__( self ):
+            win32gui.DestroyWindow( self.handle )
+
+        def set_range( self, value ):
+            win32gui.SendMessage( self.handle,
+                                  commctrl.PBM_SETRANGE,
+                                  0,
+                                  win32api.MAKELONG( 0, value ) )
+        def set_step( self, value ):
+            win32gui.SendMessage( self.handle, commctrl.PBM_SETSTEP, int( value ), 0 )
+
+        def set_pos( self, value ):
+            win32gui.SendMessage( self.handle, commctrl.PBM_SETPOS, int( value ), 0 )
+
     @classmethod
     def _make_window_class_name( cls ):
         result = "window_class_{}".format( cls._next_window_class_id )
@@ -167,10 +318,11 @@ class Window( object ):
     _notify_event_id = win32con.WM_USER + 22
 
     def __init__(self, title, style,
-                 width = win32con.CW_USEDEFAULT,
-                 height = win32con.CW_USEDEFAULT,
+                 size = (win32con.CW_USEDEFAULT,
+                         win32con.CW_USEDEFAULT),
                  messages = {}):
         '''Setup a window class and a create window'''
+        self.layers = []
         self.module_handle = win32gui.GetModuleHandle(None)
         self.systray = False
         
@@ -201,8 +353,8 @@ class Window( object ):
             style,
             win32con.CW_USEDEFAULT,
             win32con.CW_USEDEFAULT,
-            width,
-            height,
+            size[ 0 ],
+            size[ 0 ],
             None,
             None,
             self.module_handle,
@@ -212,6 +364,33 @@ class Window( object ):
         state = win32con.SW_SHOW if visibility else win32con.SW_HIDE
         win32gui.ShowWindow( self.window_handle, state )
         win32gui.UpdateWindow( self.window_handle )
+
+
+    def get_size( self ):
+        return win32gui.GetWindowRect( self.window_handle )
+
+    def set_size( self, rect ):
+        win32gui.MoveWindow( self.window_handle,
+                             rect[ 0 ],
+                             rect[ 1 ],
+                             rect[ 2 ],
+                             rect[ 3 ],
+                             True )
+
+    @staticmethod
+    def screen_size():
+        return tuple( map( win32api.GetSystemMetrics,
+                           (win32con.SM_CXVIRTUALSCREEN,
+                            win32con.SM_CYVIRTUALSCREEN)))
+
+    def center( self ):
+        rect = self.get_size()
+        screen_size = self.screen_size()
+        rect = ((screen_size[ 0 ] - rect[ 2 ])/2,
+                (screen_size[ 1 ] - rect[ 3 ])/2,
+                rect[ 2 ],
+                rect[ 3 ])
+        self.set_size( rect )
 
     def set_icon( self, small_icon, big_icon ):
         # https://stackoverflow.com/questions/16472538/changing-taskbar-icon-programatically-win32-c
@@ -291,13 +470,10 @@ class Window( object ):
         win32gui.PostMessage( self.window_handle, win32con.WM_NULL, 0, 0 )
 
     def _on_paint( self, window_handle, message, wparam, lparam ):
-        (hdc, paintStruct) = win32gui.BeginPaint( self.window_handle )
-        #print paintStruct
-        #win32gui.FillRect( hdc, paintStruct[2], win32con.COLOR_WINDOW )
-        message = "text message"
-        win32gui.DrawText( hdc, message, len( message ), (5,5,100,100), win32con.DT_SINGLELINE | win32con.DT_NOCLIP  )
-        win32gui.EndPaint( self.window_handle, paintStruct )
-        #win32gui.DrawMenuBar( self.window_handle )
+        (hdc, paint_struct) = win32gui.BeginPaint( self.window_handle )
+        for layer in self.layers:
+            layer( self, hdc, paint_struct )
+        win32gui.EndPaint( self.window_handle, paint_struct )
         return 0
 
     def _on_close( self, window_handle, message, wparam, lparam ):
@@ -354,6 +530,8 @@ class WinapiGUI(BaseGUI):
 
     _variable_re = re.compile( "%\(([\w]+)\)s" )
 
+    _progress_range = 1000
+
     def _lookup_token( self, match ):
         '''
         Convert re match token to variable definitions.
@@ -402,19 +580,29 @@ class WinapiGUI(BaseGUI):
 
         menu_items = [ self.items[ item['item'] ] for item in self.config['indicator']['menu'] ]
         self.systray_window.set_menu( menu_items )
+
+        window_size = ( self.config['main_window']['width'],
+                        self.config['main_window']['height'] )
         
         self.main_window = Window(title = self.config['app_name'],
                                   style = Window.main_window_style,
-                                  width = self.config['main_window']['width'],
-                                  height = self.config['main_window']['height'])
+                                  size = window_size )
+        
+        window_roi = win32gui.GetClientRect( self.main_window.window_handle )
+        window_size = tuple( window_roi[2:] )
+        try:
+            background_path = self.get_image_path( self.config['main_window']['image'] )
+            bitmap = Image.Bitmap( background_path, size = window_size, debug = 'debug.bmp' )
+            background = Window.BitmapLayer( bitmap )
+            self.main_window.layers.append( background )
+        except KeyError:
+            pass
         
         self.main_window.set_visibility( self.config['main_window']['show'] )
         
         self.splash_screen = Window(title = self.config['app_name'],
                                     style = Window.splash_screen_style,
-                                    width = self.config['main_window']['width'],
-                                    height = self.config['main_window']['height'])
-
+                                    size = window_size )
 
         self.windows = [ self.main_window,
                          self.splash_screen,
@@ -469,19 +657,42 @@ class WinapiGUI(BaseGUI):
         pass
 
     def update_splash_screen(self, message=None, progress=None):
-        pass
+        if progress:
+            self.progress_bar.set_pos( self._progress_range * progress )
 
     def set_next_error_message(self, message=None):
         self.next_error_message = message
 
+    def get_image_path( self, name ):
+        prefix = 'icon:'
+        if name.startswith( prefix ):
+            key = name[ len( prefix ): ]
+            return self.config['icons'][ key ]
+        return name
+
     def show_splash_screen(self, height=None, width=None,
                            progress_bar=False, image=None,
                            message=None, message_x=0.5, message_y=0.5):
+        window_roi = win32gui.GetClientRect( self.splash_screen.window_handle )
+        window_size = tuple( window_roi[2:] )
+        bitmap = Image.Bitmap( self.get_image_path( image ),
+                               size = window_size )
+        background = Window.BitmapLayer( bitmap )
+        self.splash_screen.layers = [ background ]
+
+        if progress_bar:
+            self.progress_bar = Window.ProgressBar( self.splash_screen )
+            self.progress_bar.set_range( self._progress_range )
+            self.progress_bar.set_step( 1 )
+
+        self.splash_screen.center()
         self.splash_screen.set_visibility( True )
         print( "show splash" )
 
     def hide_splash_screen(self):
         self.splash_screen.set_visibility( False )
+        if hasattr( self, 'progress_bar' ):
+            del self.progress_bar
 
     def show_main_window(self):
         self.main_window.set_visibility( True )
