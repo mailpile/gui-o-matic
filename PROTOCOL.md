@@ -532,10 +532,10 @@ Spawn a command in a visible terminal, so the user can interact with it.
 
 Arguments:
 
-    * domain: (string) The domain of the cookie being updated
-    * key: (string) A the cookie key
-    * value: (optional string) A new value for the cookie
-    * remove: (optional bool) If true, delete the cookie (ignore value)
+   * domain: (string) The domain of the cookie being updated
+   * key: (string) A the cookie key
+   * value: (optional string) A new value for the cookie
+   * remove: (optional bool) If true, delete the cookie (ignore value)
 
 Modify or remove one of the HTTP cookies.
 

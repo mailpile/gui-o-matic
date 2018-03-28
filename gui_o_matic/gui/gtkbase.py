@@ -20,6 +20,7 @@ class GtkBaseGUI(BaseGUI):
         self.splash = None
         self.font_styles = {}
         self.status_display = {}
+        self.popup = None
         if pynotify:
             pynotify.init(config.get('app_name', 'gui-o-matic'))
         gobject.threads_init()
@@ -342,10 +343,12 @@ class GtkBaseGUI(BaseGUI):
                     popup_icon = self._theme_image(self.config['app_icon'])
                 popup_appname = self.config.get('app_name', 'gui-o-matic')
                 if pynotify is not None:
-                    notification = pynotify.Notification(
-                        popup_appname, message, popup_icon)
-                    notification.set_urgency(pynotify.URGENCY_NORMAL)
-                    notification.show()
+                    if self.popup is None:
+                        self.popup = pynotify.Notification(
+                            popup_appname, message, popup_icon)
+                        self.popup.set_urgency(pynotify.URGENCY_NORMAL)
+                    self.popup.update(popup_appname, message, popup_icon)
+                    self.popup.show()
                     return
                 elif not self.config.get('disable-popup-fallback'):
                     try:
