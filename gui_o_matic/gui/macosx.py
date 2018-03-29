@@ -81,7 +81,8 @@ class MacOSXGUI(BaseGUI):
         if sensitive is not None and id and id in self.items:
             self.items[id].setEnabled_(sensitive)
 
-    def notify_user(self, message=None, popup=False, alert=False):
+    def notify_user(self,
+            message=None, popup=False, alert=False, actions=None):
         pass  # FIXME
 
     def run(self):

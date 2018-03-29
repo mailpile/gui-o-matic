@@ -81,7 +81,7 @@ echo 'update_splash_screen {"progress": 0.5}'
 echo 'set_item {"id": "menu-xkcd", "sensitive": true}'
 echo 'set_item {"id": "btn-xkcd", "sensitive": true}'
 echo 'notify_user {"message": "This is a notification"}'
-echo 'notify_user {"message": "This is a popup notification", "popup": true}'
+echo 'notify_user {"message": "This is a popup XKCD notification!!!1", "popup": true, "actions": [{"op": "show_url", "label": "XKCD", "url": "https://xkcd.com"}]}'
 
 sleep 2
 echo 'update_splash_screen {"progress": 1.0}'

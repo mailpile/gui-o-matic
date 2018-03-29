@@ -499,6 +499,7 @@ Arguments:
    * message: (string) Tell the user something
    * popup: (optional bool) Prefer an OSD/growl/popup style notification
    * alert: (optional bool) Try harder to get the user's attention
+   * actions: (optional list of dicts) Actions relating to the notification
 
 This method should always try and display a message to the user, no matter
 which windows are visible:
@@ -511,6 +512,32 @@ which windows are visible:
 If a notifications has `"alert": true`, that is a signal to the GUI that
 it should flash a light, bounce an icon, vibrate or otherwise try to draw
 the user's attention to the app.
+
+If present, `actions` should be a list of dictionaries containing the same
+`label`, `op`, `args` and `position` arguments as are used in the main
+window actions.
+
+Since support for notification actions varies a great deal from platform to
+platform (and toolkit to toolkit), the caller must assume some or all items
+in `actions` will be silently ignored.  The list should be sorted by
+priority (most important first) and the caller should assume list
+processing may be truncated at any point or individual items skipped due to
+platform limitations.
+
+The `actions` list is likely to be ignored if `popup` is not set to True.
+
+GUI implementors should carefully consider the user experience of
+notification actions on their platform. It may be better to not implement
+`actions` at all than to provide confusing or destructive implementations.
+As an example, if an URL is to be opened in the browser, but the
+implementation cannot raise/focus/display the browser on click, it's
+probably best not to offer browser actions at all (confusion). Similarly,
+implementations that clobber pre-existing tabs in the user's browser should
+also be avoided (destructive).
+
+The presence (or absence) of an `actions` list should not alter the
+priority or placement of displayed notifications.
+
 
 ### show_url
 
