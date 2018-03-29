@@ -84,6 +84,7 @@ echo 'notify_user {"message": "This is a notification"}'
 echo 'notify_user {"message": "This is a popup XKCD notification!!!1", "popup": true, "actions": [{"op": "show_url", "label": "XKCD", "url": "https://xkcd.com"}]}'
 
 sleep 2
+echo 'set_status {"badge": ""}'
 echo 'update_splash_screen {"progress": 1.0}'
 echo 'set_status {"status": "working"}'
 sleep 2
