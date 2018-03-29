@@ -386,7 +386,8 @@ class GtkBaseGUI(BaseGUI):
     def _indicator_set_status(self, status, **kwargs):
         pass
 
-    def set_status(self, status='startup', _now=False):
+    def set_status(self, status='startup', badge=None, _now=False):
+        # FIXME: Can we support badges?
         if _now:
             do = lambda o, a: o(a)
         else:

@@ -73,7 +73,7 @@ echo 'show_splash_screen {"background": "'"$BASEDIR"'/img/gt-splash.png", "messa
 
 sleep 2
 echo 'update_splash_screen {"progress": 0.2}'
-echo 'set_status {"status": "normal"}'
+echo 'set_status {"status": "normal", "badge": "1k"}'
 
 sleep 2
 echo 'update_splash_screen {"progress": 0.5, "message": "Woohooooo"}'

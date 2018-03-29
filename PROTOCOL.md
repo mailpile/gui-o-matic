@@ -442,11 +442,25 @@ Hide the main application window.
 
 Arguments:
 
-   * status: "startup", "normal", "working", ...
+   * status: (optional string) "startup", "normal", "working", ...
+   * badge: (optional string) A very short snippet of text
 
-Sets the overall "status" of the application, which will be displayed by
-changing an indicator icon somewhere within the app. All statuses should
-have an icon defined in the `images: { ... }` section of the configuration.
+If `status` is provided, set the overall "status" of the application.
+This is generally displayed by changing an indicator icon somewhere within
+the app.  All statuses should have an icon defined in the `images: { ... }`
+section of the configuration.
+
+The `badge` is a small amount of text to overlay over the app's icon (which
+may or may not be the same icon as the status icon, where this goes, if
+anywhere is platform dependent), representing unread message counts or
+other similar data.  Callers should assume only some platforms implement
+this and should assume the amount of text is limited to 1-3 characters at
+most.
+
+GUI implementors must assume that the `status` and `badge` may be set
+independently of each other, as many callers will use different logic to
+track and report each one.
+
 
 ### set_status_display
 

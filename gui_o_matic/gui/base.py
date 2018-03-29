@@ -143,8 +143,8 @@ class BaseGUI(object):
         for item_info in menu:
             self._add_menu_item(**item_info)
 
-    def set_status(self, status='startup'):
-        print('STATUS: %s' % status)
+    def set_status(self, status='startup', badge=None):
+        print('STATUS: %s (badge=%s)' % (status, badge))
 
     def quit(self):
         raise KeyboardInterrupt("User quit")

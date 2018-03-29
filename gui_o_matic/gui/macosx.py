@@ -72,7 +72,8 @@ class MacOSXGUI(BaseGUI):
         self.ind.setMenu_(self.menu)
         self.set_status()
 
-    def set_status(self, status='startup'):
+    def set_status(self, status='startup', badge=None):
+        # FIXME: Can we support badges?
         self.ind.setImage_(self.images.get(status, self.images['normal']))
 
     def set_item(self, id=None, label=None, sensitive=None):
