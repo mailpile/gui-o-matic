@@ -126,7 +126,13 @@ class BaseGUI(object):
     def _theme_image(self, path):
         if path.startswith('image:'):
             path = self.config['images'][path.split(':', 1)[1]]
-        return os.path.abspath(path.replace('%(theme)s', self.ICON_THEME))
+        path = path.replace('%(theme)s', self.ICON_THEME)
+        if path != os.path.abspath(path):
+            # The protocol mandates absolute paths, to avoid weird breakage
+            # if the config and GUI app are generated from different working
+            # directories. Fail here to help developers catch bugs early.
+            raise ValueError('Path is not absolute: %s' % path)
+        return path
 
     def _add_menu_item(self, id='item', label='Menu item', sensitive=False,
                              op=None, args=None, **ignored_kwargs):

@@ -51,7 +51,7 @@ section means. They should be omitted from any actual implementation
     {
         # Basics
         "app_name": "Your App Name",
-        "app_icon": "/reference/or/path/to/icon.png",
+        "app_icon": "/reference/or/absolute/path/to/icon.png",
 
         # These are for testing only; implementations may ignore them.
         "_require_gui": ["unity", "macosx", "gtk"],
@@ -68,7 +68,9 @@ section means. They should be omitted from any actual implementation
 
 The `images` section defines a dictionary of named icons/images. The names can
 be used directly by the `set_status` method, or anywhere an icon path can be
-provided by using the syntax `image:NAME` instead.
+provided by using the syntax `image:NAME` instead. Note that all paths should
+be absolute, as we don't want to make assumptions about the working directory
+of the GUI app itself.
 
 The only required entry is `normal`.
 
@@ -80,10 +82,10 @@ at some point Mac OS X needed slightly different icons from the others.
 
     ...
         "images": {
-            "normal": "/path/to/%(theme)s/normal.svg",
-            "flipper": "/path/to/unthemed/flipper.png",
-            "flopper": "/path/to/flop-%(theme)s.png"
-            "background": "/path/to/a/nice/background.jpg"
+            "normal": "/absolute/path/to/%(theme)s/normal.svg",
+            "flipper": "/absolute/path/to/unthemed/flipper.png",
+            "flopper": "/absolute/path/to/flop-%(theme)s.png"
+            "background": "/absolute/path/to/a/nice/background.jpg"
         },
     ...
 
@@ -164,7 +166,7 @@ hints.
                     "details": "Greetings and salutations to all!"
                 },{
                     "id": "id2",
-                    "icon": "/path/to/some/icon.png",
+                    "icon": "/absolute/path/to/some/icon.png",
                     "title": "Launching Frobnicator",
                     "details": "The beginning and end of all things"
                 }
@@ -404,7 +406,7 @@ A description of the existing commands follows; see also
 
 Arguments:
 
-   * background: (string) path to a background image file
+   * background: (string) absolute path to a background image file
    * message: (string) initial status message
    * progress_bar: (bool) display a progress bar?
 
