@@ -21,9 +21,14 @@ import atexit
 import itertools
 import struct
 
+import pil_bmp_fix
+
+# Work-around till upstream PIL is patched.
+#
+BMP_FORMAT = "BMP+ALPHA"
+PIL.Image.register_save( BMP_FORMAT, pil_bmp_fix._save )
+
 from gui_o_matic.gui.base import BaseGUI
-
-
 
 class Image( object ):
     '''
@@ -60,7 +65,7 @@ class Image( object ):
         '''
         try to create a bitmap in memory
 
-        NOTE: Doesn't work! Maybe troubleshoot more later...
+        NOTE: Doesn't work! FillRect always paints with background!
         '''
         assert( source.mode == 'RGBA' )
         bitmap = win32gui.CreateBitmap( source.width,
@@ -74,6 +79,7 @@ class Image( object ):
 
         pixels = source.load()
 
+        '''
         for x in range( source.width ):
             for y in range( source.height ):
                 pixel = struct.pack( '@BBBB', *pixels[ x, y ] )
@@ -82,6 +88,10 @@ class Image( object ):
                 print "{} {} {}".format( x, y, color )
                 brush = win32gui.CreateSolidBrush( color )
                 win32gui.FillRect( hdc_mem, ( x, y, 1, 1 ), brush )
+        '''
+        pixel = struct.pack('@BBBB', 0, 255, 255, 0  )
+        brush = win32gui.CreateSolidBrush( struct.unpack( "@i", pixel )[ 0 ] )
+        win32gui.FillRect( hdc_mem, ( 0, 0, source.width, source.height ), brush )
 
         print "done!"
 
@@ -115,6 +125,10 @@ class Image( object ):
 
         if debug:
             source.save( debug, mode[ 1 ] )
+
+        #if mode[ 0 ] == win32con.IMAGE_BITMAP:
+        #    self.handle = self._winapi_bitmap( source )
+        #    return
         
         with tempfile.NamedTemporaryFile( delete = False ) as handle:
             filename = handle.name
@@ -126,7 +140,7 @@ class Image( object ):
                                               mode[ 0 ],
                                               source.width,
                                               source.height,
-                                              win32con.LR_LOADFROMFILE | win32con.LR_CREATEDIBSECTION )
+                                              win32con.LR_LOADFROMFILE )#| win32con.LR_CREATEDIBSECTION )
         finally:
             os.unlink( filename )
 
@@ -193,7 +207,19 @@ class Action( object ):
 
 class Window( object ):
     '''
-    Window class stub
+    Window class: Provides convenience methods for managing windows. Also globs
+    systray icon display functionality, since that has to hang off a window/
+    windproc. Principle methods:
+    
+        - set_visiblity( True|False )
+        - set_size( x, y, width, height )
+        - get_size() -> ( x, y, width, height )
+        - set_systray( icon|None, hovertext )   # None removes systray icon
+        - set_menu( [ Actions... ] )            # for systray
+        - set_icon( small_icon, large_icon )    # window and taskbar
+
+    Rendering:
+        Add Layer objects to layers list to have them rendered on WM_PAINT.
     '''
     # Standard window style except disable resizing
     #
@@ -212,11 +238,99 @@ class Window( object ):
     _next_window_class_id = 0
 
     class Layer( object ):
+        '''
+        Abstract base for something to be rendered in response to WM_PAINT.
+        Implement __call__ to update the window as desired.
+        '''
+
+        @staticmethod
+        def overlap( rect_a, rect_b ):
+            
+            x_min = max(rect_a[0], rect_b[0])
+            y_min = max(rect_a[1], rect_b[1])
+            x_max = min(rect_a[0] + rect_a[2], rect_b[0] + rect_b[2])
+            x_max = min(rect_a[1] + rect_a[3], rect_b[1] + rect_b[3])
+            return (x_min,
+                    y_min,
+                    x_max - x_min,
+                    y_max - y_min)
 
         def __call__( self, window, hdc, paint_struct ):
             raise NotImplementedError
 
+    class ImageBlendLayer( Layer ):
+        '''
+        Manually blends an image with the window, pixel by pixel, using alpha.
+        Pros:
+          - Works.
+        Cons:
+          - Slow!
+        TODO:
+          - Check out rendering everything in PIL, then shipping to winapi as RGB.
+              - win32gui.LoadImage() won't open RGBA, alpha is primarily GDI+.
+              - Could optionally grab prior window contents.
+          - Maybe modidy win32gui.CreateBitmap() to accept an initial byte sequence?
+        Wanted:
+          - Limit blending to ROI.
+          - Handle interrupted rendering better.
+          - Handle sizing/stretching better.
+        '''
+
+        def __init__( self, image, src_offset = (0,0), dst_offset = (0,0), size = None ):
+            self.image = image
+            self.src_offset = src_offset 
+            self.dst_offset = dst_offset
+            self.size = size or image.size
+            self.pixels = image.load()
+
+        def _baseline_benchmark( self, window, hdc, paint_struct ):
+            '''
+            Test pixel access performance without blending.
+            Result: About the same as blending.
+            '''
+            for x in range(self.size[0]):
+                for y in range(self.size[1]):
+                    dst_x = x + self.dst_offset[0]
+                    dst_y = y + self.dst_offset[1]
+                    packed = win32gui.GetPixel( hdc, dst_x, dst_y )
+                    win32gui.SetPixel( hdc, dst_x, dst_y, 0 )
+
+        def __call__( self, window, hdc, paint_struct ):
+            '''
+            Blend image per pixel. Inlined everything in integer math
+            to reduce python overhead, almost as fast as baseline
+            benchmark.
+            '''
+            # TODO: Clip to draw ROI
+            try:
+                for y in range(self.size[1]):
+                    for x in range(self.size[0]):
+                        dst_x = x + self.dst_offset[0]
+                        dst_y = y + self.dst_offset[1]
+                        src_x = x + self.src_offset[0]
+                        src_y = y + self.src_offset[1]
+                        original = win32gui.GetPixel( hdc, dst_x, dst_y )
+                        src_r = (original >> 0) & 255
+                        src_g = (original >> 8) & 255
+                        src_b = (original >> 16) & 255
+                        mix_r, mix_g, mix_b, alpha = self.pixels[ src_x, src_y ]
+                        complement = 255 - alpha
+                        dst_r = (src_r * complement + mix_r * alpha) / 255
+                        dst_g = (src_g * complement + mix_g * alpha) / 255
+                        dst_b = (src_b * complement + mix_b * alpha) / 255
+                        result = (dst_b << 16) | (dst_g << 8) | (dst_r << 0)
+                        win32gui.SetPixel( hdc, dst_x, dst_y, result )
+
+            # If part of the window becomes occluded during drawing, an
+            # exception is thrown.
+            #
+            except Exception as e:
+                traceback.print_exc()    
+
     class BitmapLayer( Layer ):
+        '''
+        Stretch a bitmap across an ROI. May no longer be useful...
+        '''
 
         def __init__( self, bitmap, src_roi = None, dst_roi = None, blend = None ):
             self.bitmap = bitmap
@@ -233,8 +347,7 @@ class Window( object ):
             hdc_mem = win32gui.CreateCompatibleDC( hdc )
             prior = win32gui.SelectObject( hdc_mem, self.bitmap.handle )
 
-            print( (src_roi,dst_roi,blend) )
-
+            # Blit with alpha channel blending
             win32gui.AlphaBlend( hdc,
                                  dst_roi[ 0 ],
                                  dst_roi[ 1 ],
@@ -246,14 +359,30 @@ class Window( object ):
                                  src_roi[ 2 ],
                                  src_roi[ 3 ],
                                  blend )
+            '''
+            # Blit without alpha channel blending
+            win32gui.StretchBlt( hdc,
+                                 dst_roi[ 0 ],
+                                 dst_roi[ 1 ],
+                                 dst_roi[ 2 ],
+                                 dst_roi[ 3 ],
+                                 hdc_mem,
+                                 src_roi[ 0 ],
+                                 src_roi[ 1 ],
+                                 src_roi[ 2 ],
+                                 src_roi[ 3 ],
+                                 win32con.SRCCOPY )'''
             
             win32gui.SelectObject( hdc_mem, prior )
             win32gui.DeleteDC( hdc_mem )
 
 
     class TextLayer( Layer ):
+        '''
+        Stub text layer, need to add font handling.
+        '''
 
-        def __init__( self, message, rect, style = win32con.DT_SINGLELINE | win32con.DT_NOCLIP ):
+        def __init__( self, message, rect, style = win32con.DT_SINGLELINE ):
             #win32gui.FillRect( hdc, paintStruct[2], win32con.COLOR_WINDOW )
             self.message = message
             self.rect = rect
@@ -267,6 +396,9 @@ class Window( object ):
                                self.style )
 
     class Control( object ):
+        '''
+        Base class for controls based subwindows (common controls)
+        '''
 
         _next_control_id = 1024
 
@@ -521,7 +653,7 @@ class WinapiGUI(BaseGUI):
         regular window has regular boarders and some status items.
       - Graphic resources: For winapi, we'll have to convert all graphics into
         bitmaps, using winapi buffers to hold the contents.
-      - Menu items: (regular window only) We'll have to manage associations
+      - Menu items: We'll have to manage associations
         between menu items, actions, and all that: For an item ID (gui-o-matic
         protocol), we'll have to track menu position, generate a winapi command
         id, and catch/map associated WM_COMMAND event back to actions. This
@@ -675,10 +807,16 @@ class WinapiGUI(BaseGUI):
                            message=None, message_x=0.5, message_y=0.5):
         window_roi = win32gui.GetClientRect( self.splash_screen.window_handle )
         window_size = tuple( window_roi[2:] )
-        bitmap = Image.Bitmap( self.get_image_path( image ),
-                               size = window_size )
-        background = Window.BitmapLayer( bitmap )
-        self.splash_screen.layers = [ background ]
+        
+        #bitmap = Image.Bitmap( self.get_image_path( image ),
+        #                       size = window_size )
+        #background = Window.BitmapLayer( bitmap )
+        #self.splash_screen.layers = [ background ]
+        
+        image = PIL.Image.open( self.get_image_path( image ) )
+        image = image.convert('RGBA')
+        image = image.resize( window_size, PIL.Image.ANTIALIAS )
+        self.splash_screen.layers = [ Window.ImageBlendLayer( image ) ]
 
         if progress_bar:
             self.progress_bar = Window.ProgressBar( self.splash_screen )
