@@ -183,5 +183,5 @@ class BaseGUI(object):
                 (self.next_error_message or 'Error: %(error)s')
                 % {'error': unicode(e)})
 
-    def notify_user(self, message='Hello', popup=False):
+    def notify_user(self, message='Hello', popup=False, alert=False):
         print('NOTIFY: %s' % message)

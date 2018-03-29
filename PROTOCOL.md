@@ -496,6 +496,7 @@ Arguments:
 
    * message: (string) Tell the user something
    * popup: (optional bool) Prefer an OSD/growl/popup style notification
+   * alert: (optional bool) Try harder to get the user's attention
 
 This method should always try and display a message to the user, no matter
 which windows are visible:
@@ -504,6 +505,10 @@ which windows are visible:
    * If the splash screen is visible, display there
    * If the main window is visible, display there
    * ...?
+
+If a notifications has `"alert": true`, that is a signal to the GUI that
+it should flash a light, bounce an icon, vibrate or otherwise try to draw
+the user's attention to the app.
 
 ### show_url
 

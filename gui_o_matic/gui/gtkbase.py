@@ -329,7 +329,8 @@ class GtkBaseGUI(BaseGUI):
                 gobject.idle_add(hide, self)
             wait_lock.acquire()
 
-    def notify_user(self, message='Hello', popup=False):
+    def notify_user(self, message='Hello', popup=False, alert=False):
+        # FIXME: Can we do something for alerts?
         def notify(self):
             # We always update the indicator status with the latest
             # notification.
