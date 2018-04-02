@@ -151,53 +151,65 @@ class Image( object ):
         pass
 
 
+class Registry( object ):
+    '''
+    Registry that maps objects to IDs
+    '''
+    _objectmap = {}
 
-class Action( object ):
+    _next_id = 1024
+
+    @classmethod
+    def register( cls, obj, dst_attr = 'registry_id' ):
+        '''
+        Register an object at the next available id.
+        '''
+        next_id = cls._next_id
+        cls._next_id = next_id + 1
+        cls._objectmap[ next_id ] = obj
+        if dst_attr:
+            setattr( obj, dst_attr, next_id )
+            
+    @classmethod
+    def lookup( cls, registry_id ):
+        '''
+        Get a registered action by id, probably for invoking it.
+        '''
+        return cls._objectmap[ registry_id ]
+
+    class AutoRegister( object ):
+        def __init__( self, *args ):
+            '''
+            Register subclasses at init time.
+            '''
+            Registry.register( self, *args )
+
+        def lookup( self, registry_id ):
+            return Registry.lookup( self, registry_id )
+
+class Action( Registry.AutoRegister ):
     '''
     Class binding a string id to numeric id, op, and action, allowing
     WM_COMMAND etc to be easily mapped to gui-o-matic protocol elements.
     '''
 
-    # Generate ids per action--Windows recommends we avoid low IDs
-    #
-    _base_gui_id = 1024
-
-    # Registry of actions, by id
-    #
-    _actions = {}
-
-    @classmethod
-    def register( cls, action ):
-        '''
-        Generate and associate an id with the given action
-        '''
-        action._gui_id = cls._base_gui_id
-        cls._actions[ action._gui_id ] = action
-        cls._base_gui_id += 1
-            
-    @classmethod
-    def byId( cls, gui_id ):
-        '''
-        Get a registered action by id, probably for invoking it.
-        '''
-        return cls._actions[ gui_id ]
 
     def __init__( self, gui, identifier, label, operation = None, sensitive = False, args = None ):
         '''
         Bind the action state to the gui for later invocation or modification.
         '''
+        super( Action, self ).__init__()
         self.gui = gui
         self.identifier = identifier
         self.label = label
         self.operation = operation
         self.sensitive = sensitive
         self.args = args
-        self.register( self )
 
     def get_id( self ):
-        return self._gui_id
+        return self.registry_id
 
-    def __call__( self ):
+    def __call__( self, *args ):
         '''
         Apply the bound action arguments
         '''
@@ -395,23 +407,72 @@ class Window( object ):
                                self.rect,
                                self.style )
 
-    class Control( object ):
+    class Control( Registry.AutoRegister ):
         '''
         Base class for controls based subwindows (common controls)
         '''
 
         _next_control_id = 1024
 
-        @classmethod
-        def _allocate_control_id( cls ):
-            result = cls._next_control_id
-            cls._next_control_id += 1
-            return result
+        def __init__( self ):
+            super( Window.Control, self ).__init__()
+            self.action = None
+
+        def __call__( self, window, message, wParam, lParam ):
+            print "Not implemented __call__ for " + self.__class__.__name__
+
+        def set_action( self, action ):
+             print "Not implemented set_action for " + self.__class__.__name__
+
+        def __del__( self ):
+            if hasattr( self, 'handle' ):
+                win32gui.DestroyWindow( self.handle )
+
+        def set_size( self, rect ):
+            win32gui.MoveWindow( self.handle,
+                                 rect[ 0 ],
+                                 rect[ 1 ],
+                                 rect[ 2 ],
+                                 rect[ 3 ],
+                                 True )
+
+            
+        def set_action( self, action ):
+            if self.action:
+                win32gui.EnableWindow( self.handle, action.sensitive )
+                win32gui.SetWindowText( self.handle, action.label )
+                self.action = action
+
+    class Button( Control ):
+
+        def __init__( self, parent, rect, action ):
+            super( Window.Button, self ).__init__()
+
+            style = win32con.WS_TABSTOP | win32con.WS_VISIBLE | win32con.WS_CHILD | win32con.BS_DEFPUSHBUTTON
+            
+            self.handle = win32gui.CreateWindowEx( 0,
+                                                   "BUTTON",
+                                                   action.label,
+                                                   style,
+                                                   rect[ 0 ],
+                                                   rect[ 1 ],
+                                                   rect[ 2 ],
+                                                   rect[ 3 ],
+                                                   parent.window_handle,
+                                                   self.registry_id,
+                                                   win32gui.GetModuleHandle(None),
+                                                   None )
+            self.set_action( action )
+            
+        def __call__( self, window, message, wParam, lParam ):
+            self.action( window, message, wParam, lParam )            
+                                                   
 
     class ProgressBar( Control ):
         # https://msdn.microsoft.com/en-us/library/windows/desktop/hh298373(v=vs.85).aspx
         #
         def __init__( self, parent ):
+            super( Window.ProgressBar, self ).__init__()
             rect = win32gui.GetClientRect( parent.window_handle )
             yscroll = win32api.GetSystemMetrics(win32con.SM_CYVSCROLL)
             self.handle = win32gui.CreateWindowEx( 0,
@@ -423,12 +484,10 @@ class Window( object ):
                                                    (rect[ 2 ] - rect[ 0 ]) - 2*yscroll,
                                                    yscroll,
                                                    parent.window_handle,
-                                                   None,
+                                                   self.registry_id,
                                                    win32gui.GetModuleHandle(None),
                                                    None )
 
-        def __del__( self ):
-            win32gui.DestroyWindow( self.handle )
 
         def set_range( self, value ):
             win32gui.SendMessage( self.handle,
@@ -570,10 +629,10 @@ class Window( object ):
         self.menu_actions = actions
 
     def _on_command( self, window_handle, message, wparam, lparam ):
-        action_id = win32gui.LOWORD(wparam)
-        print( "command {}".format( action_id ) )
-        action = Action.byId( action_id )
-        action()
+        target_id = win32gui.LOWORD(wparam)
+        print( "command {}".format( target_id ) )
+        target = Registry.lookup( target_id )
+        target( self, message, wparam, lparam )
         return 0
 
     def _on_notify( self, window_handle, message, wparam, lparam  ):
@@ -686,6 +745,45 @@ class WinapiGUI(BaseGUI):
         self.statuses = {}
         self.items = {}
 
+    def layout_buttons( self ):
+        button_items = filter( lambda item: isinstance( item['control'], Window.Button ), self.items.values() )
+        for index, item in enumerate( button_items ):
+            rect = (10, 10 + 40*index, 100, 20)
+            item['control'].set_size( rect )
+
+
+    def create_action( self, control_factory, item ):
+        action = Action( self,
+                         identifier = item['item'],
+                         label = item['label'],
+                         operation = item.get('op'),
+                         args = item.get('args'),
+                         sensitive = item.get('sensitive', False))
+        control = control_factory( action )
+        self.items[action.identifier] = dict( action = action, control = control )
+
+    def create_menu_control( self, action ):
+        return None
+
+    def create_button_control( self, action ):
+        control = Window.Button( self.main_window, (10,10,100,30), action )
+        return control
+
+    def create_controls( self ):
+
+        # menu items
+        for item in self.config['indicator']['menu']:
+            self.create_action( self.create_menu_control, item )
+
+        menu_items = [ self.items[ item['item'] ]['action'] for item in self.config['indicator']['menu'] ]
+        self.systray_window.set_menu( menu_items )
+
+        # actions
+        for item in self.config['main_window']['actions']:
+            self.create_action( self.create_button_control, item )
+
+        self.layout_buttons()
+
     def run( self ):
         '''
         Initialize GUI and enter run loop
@@ -696,22 +794,12 @@ class WinapiGUI(BaseGUI):
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(self.appid)
         win32gui.InitCommonControls()
 
-        items = itertools.chain( self.config['indicator']['menu'],
-                                 self.config['main_window']['actions'] )
-        for item in items:
-            action = Action( self,
-                             identifier = item['item'],
-                             label = item['label'],
-                             operation = item.get('op'),
-                             args = item.get('args'),
-                             sensitive = item.get('sensitive', False))
-            self.items[action.identifier] = action
 
+            
         self.systray_window = Window(title = self.config['app_name'],
                                      style = Window.systray_style)
 
-        menu_items = [ self.items[ item['item'] ] for item in self.config['indicator']['menu'] ]
-        self.systray_window.set_menu( menu_items )
+       
 
         window_size = ( self.config['main_window']['width'],
                         self.config['main_window']['height'] )
@@ -729,6 +817,11 @@ class WinapiGUI(BaseGUI):
             self.main_window.layers.append( background )
         except KeyError:
             pass
+
+        #self.status_text = Window.TextLayer('Text',(10,10,100,100))
+        #q = Action( self, "Quit", "Quit", "quit", True )
+        #self.button = Window.Button( self.main_window, (10, 30, 100, 100), q )
+        #self.main_window.layers.append( self.status_text )
         
         self.main_window.set_visibility( self.config['main_window']['show'] )
         
@@ -741,6 +834,8 @@ class WinapiGUI(BaseGUI):
                          self.systray_window ]
 
         self.set_status( 'normal' )
+
+        self.create_controls()
 
         #FIXME: Does not run!
         #
@@ -757,10 +852,6 @@ class WinapiGUI(BaseGUI):
         
     def terminal(self, command='/bin/bash', title=None, icon=None):
         print( "FIXME: Terminal not supported!" )
-
-    def _add_menu_item(self, item='item', label='Menu item', sensitive=False,
-                             op=None, args=None, **ignored_kwargs):
-        pass
 
     def set_status(self, status='startup'):
         icon_path = self._resolve_variables( self.config['icons'][status] )
@@ -780,10 +871,18 @@ class WinapiGUI(BaseGUI):
         raise KeyboardInterrupt("User quit")
 
     def set_item_label(self, item=None, label=None):
-        self.items[item].label = label
+        action = self.items[item]['action']
+        action.label = label
+        control = self.items[item]['control']
+        if control:
+            control.set_action( action )
 
     def set_item_sensitive(self, item=None, sensitive=True):
-        self.items[item].sensitive = sensitive
+        action = self.items[item]['action']
+        action.sensitive = sensitive
+        control = self.items[item]['control']
+        if control:
+            control.set_action( action )
         
     def set_substatus(self, substatus=None, label=None, hint=None, icon=None, color=None):
         pass
