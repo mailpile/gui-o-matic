@@ -421,9 +421,6 @@ class Window( object ):
         def __call__( self, window, message, wParam, lParam ):
             print "Not implemented __call__ for " + self.__class__.__name__
 
-        def set_action( self, action ):
-             print "Not implemented set_action for " + self.__class__.__name__
-
         def __del__( self ):
             if hasattr( self, 'handle' ):
                 win32gui.DestroyWindow( self.handle )
@@ -438,10 +435,9 @@ class Window( object ):
 
             
         def set_action( self, action ):
-            if self.action:
-                win32gui.EnableWindow( self.handle, action.sensitive )
-                win32gui.SetWindowText( self.handle, action.label )
-                self.action = action
+            win32gui.EnableWindow( self.handle, action.sensitive )
+            win32gui.SetWindowText( self.handle, action.label )
+            self.action = action
 
     class Button( Control ):
 
@@ -545,7 +541,7 @@ class Window( object ):
             win32con.CW_USEDEFAULT,
             win32con.CW_USEDEFAULT,
             size[ 0 ],
-            size[ 0 ],
+            size[ 1 ],
             None,
             None,
             self.module_handle,
@@ -559,6 +555,9 @@ class Window( object ):
 
     def get_size( self ):
         return win32gui.GetWindowRect( self.window_handle )
+
+    def get_client_region( self ):
+        return win32gui.GetClientRect( self.window_handle )
 
     def set_size( self, rect ):
         win32gui.MoveWindow( self.window_handle,
@@ -746,11 +745,52 @@ class WinapiGUI(BaseGUI):
         self.items = {}
 
     def layout_buttons( self ):
-        button_items = filter( lambda item: isinstance( item['control'], Window.Button ), self.items.values() )
-        for index, item in enumerate( button_items ):
-            rect = (10, 10 + 40*index, 100, 20)
-            item['control'].set_size( rect )
+        '''
+        layout buttons, assuming the config declaration is in order.
+        '''
+        def button_items():
+            button_keys = map( lambda item: item['item'],
+                               self.config['main_window']['actions'] )
+            return map( lambda key: self.items[ key ], button_keys )
+        window_size = self.main_window.get_client_region()
 
+        # Layout left to right across the bottom
+        spacing = 10
+        min_width = 20
+        min_height = 20
+        x_offset = window_size[0] + spacing
+        y_offset = window_size[3] - window_size[1] - spacing
+        x_limit = window_size[2]
+
+        for index, item in enumerate( button_items() ):
+            action = item[ 'action' ]
+            button = item[ 'control' ]
+            
+            hdc = win32gui.GetDC( button.handle )
+            width, height = win32gui.GetTextExtentPoint32( hdc, action.label )
+            win32gui.ReleaseDC( None, hdc )
+            
+            
+            width = max( width + spacing , min_width )
+            height = max( height + spacing, min_height )
+
+            # create new row if wrapping needed(not well tested)
+            if x_offset + width > x_limit:
+                x_offset = window_size[0] + spacing
+                y_offset -= spacing + height
+
+            rect = (x_offset,
+                    y_offset - height,
+                    width,
+                    height)
+            print rect
+            button.set_size( rect )
+            x_offset += width + spacing
+
+        # Force buttons to refresh overlapped regions
+        for item in button_items():
+            button = item[ 'control' ]
+            win32gui.InvalidateRect( button.handle, None, False )
 
     def create_action( self, control_factory, item ):
         action = Action( self,
@@ -770,7 +810,11 @@ class WinapiGUI(BaseGUI):
         return control
 
     def create_controls( self ):
-
+        '''
+        Grab all the controls (actions+menu items) out of the config
+        and instantiate them. self.items contains action+control pairs
+        for each item.
+        '''
         # menu items
         for item in self.config['indicator']['menu']:
             self.create_action( self.create_menu_control, item )
@@ -876,6 +920,7 @@ class WinapiGUI(BaseGUI):
         control = self.items[item]['control']
         if control:
             control.set_action( action )
+            self.layout_buttons()
 
     def set_item_sensitive(self, item=None, sensitive=True):
         action = self.items[item]['action']
