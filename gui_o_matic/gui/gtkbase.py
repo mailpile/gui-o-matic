@@ -19,7 +19,8 @@ class GtkBaseGUI(BaseGUI):
         BaseGUI.__init__(self, config)
         self.splash = None
         self.font_styles = {}
-        self.substatus = {}
+        self.status_display = {}
+        self.popup = None
         if pynotify:
             pynotify.init(config.get('app_name', 'gui-o-matic'))
         gobject.threads_init()
@@ -29,7 +30,7 @@ class GtkBaseGUI(BaseGUI):
         self.menu = gtk.Menu()
         self._create_menu_from_config()
 
-    def _add_menu_item(self, item=None, label='Menu item',
+    def _add_menu_item(self, id=None, label='Menu item',
                              sensitive=False,
                              separator=False,
                              op=None, args=None,
@@ -45,8 +46,8 @@ class GtkBaseGUI(BaseGUI):
                 menu_item.connect("activate", activate(op, args or []))
         menu_item.show()
         self.menu.append(menu_item)
-        if item:
-            self.items[item] = menu_item
+        if id:
+            self.items[id] = menu_item
 
     def _set_background_image(self, container, image):
         themed_image = self._theme_image(image)
@@ -64,18 +65,23 @@ class GtkBaseGUI(BaseGUI):
             return False
         container.connect('expose_event', draw_background)
 
-    def _main_window_add_actions(self, button_box):
-        for action in self.config['main_window'].get('actions', []):
+    def _main_window_add_action_items(self, button_box):
+        for action in self.config['main_window'].get('action_items', []):
             if action.get('type', 'button') == 'button':
                 widget = gtk.Button(label=action.get('label', 'OK'))
                 event = "clicked"
-            elif action['type'] == 'checkbox':
-                widget = gtk.CheckButton(label=action.get('label', '?'))
-                if action.get('checked'):
-                    widget.set_active(True)
-                event = "toggled"
+#
+# Disabled for now - what was supposed to happen when the box was ticked
+# or unticked was never really resolved in a satisfactory way.
+#
+#           elif action['type'] == 'checkbox':
+#               widget = gtk.CheckButton(label=action.get('label', '?'))
+#               if action.get('checked'):
+#                   widget.set_active(True)
+#               event = "toggled"
+#
             else:
-                raise NotImplementedError('We only have buttons atm.')
+                raise NotImplementedError('We only have buttons ATM!')
 
             if action.get('position', 'left') in ('first', 'left', 'top'):
                 button_box.pack_start(widget, False, True)
@@ -92,7 +98,7 @@ class GtkBaseGUI(BaseGUI):
                     activate(action['op'], action.get('args', [])))
 
             widget.set_sensitive(action.get('sensitive', True))
-            self.items[action['item']] = widget
+            self.items[action['id']] = widget
 
     def _main_window_indicator(self, menu_container, icon_container):
         if not self._HAVE_INDICATOR:
@@ -106,7 +112,7 @@ class GtkBaseGUI(BaseGUI):
             icon_container.pack_start(icon, False, True)
             self.main_window['indicator_icon'] = icon
 
-    def _set_substatus_icon(self, status, icon_path, size=32):
+    def _set_status_display_icon(self, status, icon_path, size=32):
         if 'icon' in status:
             themed_icon = self._theme_image(icon_path)
             img = gtk.gdk.pixbuf_new_from_file(themed_icon)
@@ -121,22 +127,24 @@ class GtkBaseGUI(BaseGUI):
 
         # Enforce that the window always has at least one status section,
         # even if the configuration doesn't specify one.
-        stat_defs = wcfg.get("substatus") or [{"item": "status", "label": ""}]
+        sd_defs = wcfg.get("status_displays") or [{
+            "id": "notification",
+            "details": wcfg.get('initial_notification', '')}]
 
         # Scale the status icons relative to a) how tall the window is,
         # and b) how many status lines we are showing.
-        icon_size = int(0.66 * wcfg.get('height', 360) / len(stat_defs))
+        icon_size = int(0.66 * wcfg.get('height', 360) / len(sd_defs))
 
-        substatuses = []
-        for st in stat_defs:
+        status_displays = []
+        for st in sd_defs:
             ss = {
-                'item': st['item'],
+                'id': st['id'],
                 'hbox': gtk.HBox(False, 5),
                 'vbox': gtk.VBox(False, 5),
-                'label': gtk.Label(),
-                'hint': gtk.Label()}
+                'title': gtk.Label(),
+                'details': gtk.Label()}
 
-            for which in ('label', 'hint'):
+            for which in ('title', 'details'):
                 ss[which].set_markup(st.get(which, ''))
                 if which in self.font_styles:
                     ss[which].modify_font(self.font_styles[which])
@@ -144,48 +152,49 @@ class GtkBaseGUI(BaseGUI):
             if 'icon' in st:
                 ss['icon'] = gtk.Image()
                 ss['hbox'].pack_start(ss['icon'], False, True)
-                self._set_substatus_icon(ss, st['icon'], icon_size)
+                self._set_status_display_icon(ss, st['icon'], icon_size)
                 text_x = 0.0
             else:
-                # If there is no icon, center our labels and hints.
+                # If there is no icon, center our title and details
                 text_x = 0.5
 
-            ss['label'].set_alignment(text_x, 1.0)
-            ss['hint'].set_alignment(text_x, 0.0)
-            ss['vbox'].pack_start(ss['label'], True, True)
-            ss['vbox'].pack_end(ss['hint'], True, True)
+            ss['title'].set_alignment(text_x, 1.0)
+            ss['details'].set_alignment(text_x, 0.0)
+            ss['vbox'].pack_start(ss['title'], True, True)
+            ss['vbox'].pack_end(ss['details'], True, True)
             ss['vbox'].set_spacing(1)
             ss['hbox'].pack_start(ss['vbox'], True, True)
             ss['hbox'].set_spacing(7)
-            substatuses.append(ss)
-        self.substatus = dict((ss['item'], ss) for ss in substatuses)
+            status_displays.append(ss)
+        self.status_display = dict((ss['id'], ss) for ss in status_displays)
 
-        status = None
-        if 'status' not in self.substatus:
-            status = gtk.Label()
-            status.set_markup(wcfg.get('label', ''))
-            status.set_alignment(0, 0.5)
-            if 'status' in self.font_styles:
-                status.modify_font(self.font_styles['status'])
+        notify = None
+        if 'notification' not in self.status_display:
+            notify = gtk.Label()
+            notify.set_markup(wcfg.get('initial_notification', ''))
+            notify.set_alignment(0, 0.5)
+            if 'notification' in self.font_styles:
+                notify.modify_font(self.font_styles['notification'])
 
-        if wcfg.get('image'):
-            self._set_background_image(vbox, wcfg.get('image'))
+        if wcfg.get('background'):
+            self._set_background_image(vbox, wcfg.get('background'))
 
         button_box = gtk.HBox(False, 5)
 
         self._main_window_indicator(vbox, button_box)
-        self._main_window_add_actions(button_box)
-        if status:
-            button_box.pack_start(status, True, True)
-        for ss in substatuses:
+        self._main_window_add_action_items(button_box)
+        if notify:
+            button_box.pack_start(notify, True, True)
+        for ss in status_displays:
             vbox.pack_start(ss['hbox'], True, True)
         vbox.pack_end(button_box, False, True)
 
         self.main_window['window'].add(vbox)
         self.main_window.update({
             'vbox': vbox,
-            'status': (status if status else self.substatus['status']['hint']),
-            'substatuses': substatuses,
+            'notification': (notify if notify
+                else self.status_display['notification']['details']),
+            'status_displays': status_displays,
             'buttons': button_box})
 
     # TODO: Add other window styles?
@@ -253,8 +262,8 @@ class GtkBaseGUI(BaseGUI):
             gobject.idle_add(update, self)
 
     def show_splash_screen(self, height=None, width=None,
-                           progress_bar=False, image=None, message=None,
-                           message_x=0.5, message_y=0.5,
+                           progress_bar=False, background=None,
+                           message=None, message_x=0.5, message_y=0.5,
                            _now=False):
         wait_lock = threading.Lock()
         def show(self):
@@ -273,8 +282,8 @@ class GtkBaseGUI(BaseGUI):
             else:
                 lbl = None
 
-            if image:
-                self._set_background_image(vbox, image)
+            if background:
+                self._set_background_image(vbox, background)
 
             if progress_bar:
                 pbar = gtk.ProgressBar()
@@ -320,12 +329,14 @@ class GtkBaseGUI(BaseGUI):
                 gobject.idle_add(hide, self)
             wait_lock.acquire()
 
-    def notify_user(self, message='Hello', popup=False):
+    def notify_user(self,
+            message='Hello', popup=False, alert=False, actions=None):
+        # FIXME: Can we do something for alerts? Actions?
         def notify(self):
             # We always update the indicator status with the latest
             # notification.
-            if 'status' in self.items:
-                self.items['status'].set_label(message)
+            if 'notification' in self.items:
+                self.items['notification'].set_label(message)
 
             # Popups!
             if popup:
@@ -334,10 +345,12 @@ class GtkBaseGUI(BaseGUI):
                     popup_icon = self._theme_image(self.config['app_icon'])
                 popup_appname = self.config.get('app_name', 'gui-o-matic')
                 if pynotify is not None:
-                    notification = pynotify.Notification(
-                        popup_appname, message, popup_icon)
-                    notification.set_urgency(pynotify.URGENCY_NORMAL)
-                    notification.show()
+                    if self.popup is None:
+                        self.popup = pynotify.Notification(
+                            popup_appname, message, popup_icon)
+                        self.popup.set_urgency(pynotify.URGENCY_NORMAL)
+                    self.popup.update(popup_appname, message, popup_icon)
+                    self.popup.show()
                     return
                 elif not self.config.get('disable-popup-fallback'):
                     try:
@@ -355,7 +368,7 @@ class GtkBaseGUI(BaseGUI):
                 self.update_splash_screen(message=message, _now=True)
             elif self.main_window:
                 msg = message.replace('<', '&lt;')
-                self.main_window['status'].set_markup(msg)
+                self.main_window['notification'].set_markup(msg)
             else:
                 print('FIXME: Notify: %s' % message)
         gobject.idle_add(notify, self)
@@ -373,47 +386,50 @@ class GtkBaseGUI(BaseGUI):
     def _indicator_set_status(self, status, **kwargs):
         pass
 
-    def set_status(self, status='startup', _now=False):
+    def set_status(self, status=None, badge=None, _now=False):
+        # FIXME: Can we support badges?
+        if status is None:
+            return
+
         if _now:
             do = lambda o, a: o(a)
         else:
             do = gobject.idle_add
-        icons = self.config.get('icons')
-        if icons:
-            icon = icons.get(status)
+        images = self.config.get('images')
+        if images:
+            icon = images.get(status)
             if not icon:
-                icon = icons.get('normal')
+                icon = images.get('normal')
             if icon:
                 self._indicator_set_icon(icon, do=do)
         self._indicator_set_status(status, do=do)
 
-    def set_substatus(self,
-            substatus=None, label=None, hint=None, icon=None, color=None):
-        status = self.substatus.get(substatus)
+    def set_status_display(self,
+            id=None, title=None, details=None, icon=None, color=None):
+        status = self.status_display.get(id)
         if not status:
             return
         if icon:
-            self._set_substatus_icon(status, icon, status.get('icon_size', 32))
-        if label:
-            status['label'].set_markup(label)
-        if hint:
-            status['hint'].set_markup(hint)
+            self._set_status_display_icon(
+                status, icon, status.get('icon_size', 32))
+        if title:
+            status['title'].set_markup(title)
+        if details:
+            status['details'].set_markup(details)
         if color:
             color = gtk.gdk.color_parse(color)
-            for which in ('label', 'hint'):
+            for which in ('title', 'details'):
                 status[which].modify_fg(gtk.STATE_NORMAL, color)
                 status[which].modify_text(gtk.STATE_NORMAL, color)
 
-    def set_item_label(self, item=None, label=None):
-        if item and item in self.items:
-            gobject.idle_add(self.items[item].set_label, label)
-
-    def set_item_sensitive(self, item=None, sensitive=True):
-        if item and item in self.items:
-            gobject.idle_add(self.items[item].set_sensitive, sensitive)
+    def set_item(self, id=None, label=None, sensitive=None):
+        if label is not None and id and id in self.items:
+            gobject.idle_add(self.items[id].set_label, label)
+        if sensitive is not None and id and id in self.items:
+            gobject.idle_add(self.items[id].set_sensitive, sensitive)
 
     def _font_setup(self):
-        for name, style in self.config.get('font-styles', {}).iteritems():
+        for name, style in self.config.get('font_styles', {}).iteritems():
             pfd = pango.FontDescription()
             pfd.set_family(style.get('family', 'normal'))
             pfd.set_size(style.get('points', 12) * pango.SCALE)

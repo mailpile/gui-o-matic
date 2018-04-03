@@ -102,6 +102,18 @@ class BaseGUI(object):
                 self._report_error(e)
         return False
 
+    def set_http_cookie(self, domain=None, key=None, value=None, remove=False):
+        all_cookies = self.config.get('http_cookies', {})
+        domain_cookies = all_cookies.get(domain, {})
+        if remove:
+            if key in domain_cookies:
+                del domain_cookies[key]
+        else:
+            domain_cookies[key] = value
+            # Ensure the cookie config section exists
+            all_cookies[domain] = domain_cookies
+            self.config['http_cookies'] = all_cookies
+
     def terminal(self, command='/bin/bash', title=None, icon=None):
         cmd = [
             "xterm",
@@ -112,33 +124,36 @@ class BaseGUI(object):
         self._spawn(cmd)
 
     def _theme_image(self, path):
-        if path.startswith('icon:'):
-            path = self.config['icons'][path.split(':', 1)[1]]
-        return os.path.abspath(path.replace('%(theme)s', self.ICON_THEME))
+        if path.startswith('image:'):
+            path = self.config['images'][path.split(':', 1)[1]]
+        path = path.replace('%(theme)s', self.ICON_THEME)
+        if path != os.path.abspath(path):
+            # The protocol mandates absolute paths, to avoid weird breakage
+            # if the config and GUI app are generated from different working
+            # directories. Fail here to help developers catch bugs early.
+            raise ValueError('Path is not absolute: %s' % path)
+        return path
 
-    def _add_menu_item(self, item='item', label='Menu item', sensitive=False,
+    def _add_menu_item(self, id='item', label='Menu item', sensitive=False,
                              op=None, args=None, **ignored_kwargs):
         pass
 
     def _create_menu_from_config(self):
-        menu = self.config.get('indicator', {}).get('menu', [])
+        menu = self.config.get('indicator', {}).get('menu_items', [])
         for item_info in menu:
             self._add_menu_item(**item_info)
 
-    def set_status(self, status='startup'):
-        print('STATUS: %s' % status)
+    def set_status(self, status=None, badge=None):
+        print('STATUS: %s (badge=%s)' % (status, badge))
 
     def quit(self):
         raise KeyboardInterrupt("User quit")
 
-    def set_item_label(self, item=None, label=None):
+    def set_item(self, item=None, label=None, sensitive=None):
         pass
 
-    def set_item_sensitive(self, item=None, sensitive=True):
-        pass
-
-    def set_substatus(self,
-            substatus=None, label=None, hint=None, icon=None, color=None):
+    def set_status_display(self,
+            id=None, title=None, details=None, icon=None, color=None):
         pass
 
     def update_splash_screen(self, message=None, progress=None):
@@ -174,5 +189,6 @@ class BaseGUI(object):
                 (self.next_error_message or 'Error: %(error)s')
                 % {'error': unicode(e)})
 
-    def notify_user(self, message='Hello', popup=False):
+    def notify_user(self,
+            message='Hello', popup=False, alert=False, actions=None):
         print('NOTIFY: %s' % message)

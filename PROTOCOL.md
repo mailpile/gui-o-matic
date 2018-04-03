@@ -51,7 +51,7 @@ section means. They should be omitted from any actual implementation
     {
         # Basics
         "app_name": "Your App Name",
-        "app_icon": "/reference/or/path/to/icon.png",
+        "app_icon": "/reference/or/absolute/path/to/icon.png",
 
         # These are for testing only; implementations may ignore them.
         "_require_gui": ["unity", "macosx", "gtk"],
@@ -66,9 +66,11 @@ section means. They should be omitted from any actual implementation
         },
     ...
 
-The `icons` section defines a dictionary of named icons/images. The names can
+The `images` section defines a dictionary of named icons/images. The names can
 be used directly by the `set_status` method, or anywhere an icon path can be
-provided by using the syntax `icon:NAME` instead.
+provided by using the syntax `image:NAME` instead. Note that all paths should
+be absolute, as we don't want to make assumptions about the working directory
+of the GUI app itself.
 
 The only required entry is `normal`.
 
@@ -79,34 +81,34 @@ the word `dark`. The current draft OS X backend requests an `osx` theme because
 at some point Mac OS X needed slightly different icons from the others.
 
     ...
-        "icons": {
-            "normal": "/path/to/%(theme)s/normal.svg",
-            "flipper": "/path/to/unthemed/flipper.png",
-            "flopper": "/path/to/flop-%(theme)s.png"
-            "background": "/path/to/a/nice/background.jpg"
+        "images": {
+            "normal": "/absolute/path/to/%(theme)s/normal.svg",
+            "flipper": "/absolute/path/to/unthemed/flipper.png",
+            "flopper": "/absolute/path/to/flop-%(theme)s.png"
+            "background": "/absolute/path/to/a/nice/background.jpg"
         },
     ...
 
-In `font-styles`, we define font styles used in different parts of the app.
+In `font_styles`, we define font styles used in different parts of the app.
 
     ...
-        "font-styles": {
-            # Style used by labels in the main window
-            "label": {
+        "font_styles": {
+            # Style used by status display titles in the main window
+            "title": {
                 "family": "normal",
                 "points": 18,
                 "bold": True
             },
 
-            # Style used by hints (sub-labels) in the main window
-            "label": {
+            # Style used by status display details in the main window
+            "details": {
                 "points": 10,
                 "italic": True
             },
 
-            # The main-window may have a standalone status element, for
-            # messages that don't go anywhere else.
-            "status": { ... },
+            # The main-window may have a standalone notification element,
+            # for messages that don't go anywhere else.
+            "notification": { ... },
 
             # The progress reporting label on the splash screen
             "splash": { ... }
@@ -116,8 +118,8 @@ In `font-styles`, we define font styles used in different parts of the app.
 The `main_window` section defines the main app window. The main app window has
 the following elements:
 
-   * Substatuses (an icon, a text label and a text hint/description)
-   * Actions (buttons or checkboxes)
+   * Status displays (an icon and some text: title + details)
+   * Actions (buttons or menu items)
    * A notification display element (text label)
    * A background image
 
@@ -142,13 +144,13 @@ some of the actions to a hamburger "overflow" menu.
             "height": 330,
 
             # Background image.  May be ignored on some platforms.
-            "image": "icon:background",
+            "background": "image:background",
 
-            # Default status label text
-            "status": "",
+            # Default notification label text
+            "initial_notification": "",
     ...
 
-The `substatus` elements in the main window are used to communicate both visual
+The `status_displays` in the main window are used to communicate both visual
 and textual clues about different things. Each consists of an icon, a main
 label and a hint. The values provided are defaults, all are likely to change
 later on. The GUI backend has a fair bit of freedom in how it renders these,
@@ -156,17 +158,17 @@ but order should be preserved and labels should be made more prominent than
 hints.
 
     ...
-            "substatus": [
+            "status_displays": [
                 {
-                    "item": "internal-identifying-name",
-                    "icon": "icon:something",
-                    "label": "Hello world!",
-                    "hint": "Greetings and salutations to all!"
+                    "id": "internal-identifying-name",
+                    "icon": "image:something",
+                    "title": "Hello world!",
+                    "details": "Greetings and salutations to all!"
                 },{
-                    "item": "id2",
-                    "icon": "/path/to/some/icon.png",
-                    "label": "Launching Frobnicator",
-                    "hint": "The beginning and end of all things"
+                    "id": "id2",
+                    "icon": "/absolute/path/to/some/icon.png",
+                    "title": "Launching Frobnicator",
+                    "details": "The beginning and end of all things"
                 }
             ],
     ...
@@ -193,14 +195,14 @@ clarifications on these ops and their arguments.
     ...
             "actions": [
                 {
-                    "item": "open",
+                    "id": "open",
                     "type": "button",  # button is the default
                     "position": "first",
                     "label": "Open",
                     "op": "show_url",
                     "args": "http://www.google.com/"
                 },{
-                    "item": "evil666",
+                    "id": "evil666",
                     "position": "last",
                     "label": "Harakiri",
                     "op": "shell",
@@ -228,24 +230,24 @@ Menu items may also be separators, which in most environments draws a
 horizontal dividor. Environments not supporting that may use a blank menu
 item instead, or omit, as deemed appropriate.
 
-Within these menus, the `item`, `op` and `args` fields have the same
+Within these menus, the `id`, `op` and `args` fields have the same
 meanings and function as they do in the main window actions. Configuration
-writes should take care to avoid collissions when chosing `item` names.
+writes should take care to avoid collissions when chosing item IDs.
 
-An `item` named `status` is special and should receive text updates from
-the `notify_user` method.
+An menu item with the ID `notification` is special and should receive text
+updates from the `notify_user` method.
 
         "indicator": {
             "initial_status": "startup",  # Should match an icon
-            "menu": [
+            "menu_items": [
                 {
-                    "item": "status",
+                    "id": "notification",
                     "label": "Starting up!",
                     "sensitive": False
                 },{
                     "separator": True
                 },{
-                    "item": "xkcd",
+                    "id": "xkcd",
                     "label": "XKCD is great",
                     "op": "show_url",
                     "args": "https://xkcd.com/"
@@ -404,7 +406,7 @@ A description of the existing commands follows; see also
 
 Arguments:
 
-   * image: (string) path to a background image file
+   * background: (string) absolute path to a background image file
    * message: (string) initial status message
    * progress_bar: (bool) display a progress bar?
 
@@ -440,46 +442,55 @@ Hide the main application window.
 
 Arguments:
 
-   * status: "startup", "normal", "working", ...
+   * status: (optional string) "startup", "normal", "working", ...
+   * badge: (optional string) A very short snippet of text
 
-Sets the overall "status" of the application, which will be displayed by
-changing an indicator icon somewhere within the app. All statuses should
-have an icon defined in the `icons: { ... }` section of the configuration.
+If `status` is provided, set the overall "status" of the application.
+This is generally displayed by changing an indicator icon somewhere within
+the app.  All statuses should have an icon defined in the `images: { ... }`
+section of the configuration.
 
-### set_substatus
+The `badge` is a small amount of text to overlay over the app's icon (which
+may or may not be the same icon as the status icon, where this goes, if
+anywhere is platform dependent), representing unread message counts or
+other similar data.  Callers should assume only some platforms implement
+this and should assume the amount of text is limited to 1-3 characters at
+most.
+
+GUI implementors must assume that the `status` and `badge` may be set
+independently of each other, as many callers will use different logic to
+track and report each one.
+
+
+### set_status_display
 
 Arguments:
 
-   * substatus: (string) The ID of the substatus section
-   * label: (optional string) Updated text for the main label
-   * hint: (optional string) Updated text for the hint label
-   * icon: (optional string) FS path or reference to an entry in `icons`
+   * id: (string) The ID of the status display section
+   * title: (optional string) Updated text for the title label
+   * details: (optional string) Updated text for the details label
+   * icon: (optional string) FS path or reference to an entry in `images`
    * color: (optional #rgb/#rrggbb string) Color for label text
 
-This will update some or all of the elements of one of the substatus
+This will update some or all of the elements of one of the status display
 sections in the main window.
 
-### set_item_label
+### set_item
 
 Arguments:
 
-   * item: (string) The item ID as defined in the configuration
-   * label: (string) A new label!
+   * id: (string) The item ID as defined in the configuration
+   * label: (optional string) A new label!
+   * sensitive: (optional bool) Make item senstive (default) or insensitive
 
 This can be used to change the labels displayed in the indicator menu
 (the `indicator: menu: [ ... ]` section of the configuration).
 
-### set_item_sensitive
-
-Arguments:
-
-   * item: (string) The item ID as defined in the configuration
-   * sensitive: (optional bool) Make item senstive (default) or insensitive
-
-This can be used to change the sensitivity of one of the entries in the
+This can also be used to change the sensitivity of one of the entries in the
 indicator menu (the `indicator: menu: [ ... ]` section of the config).
 Insensitive items are greyed out but should still be displayed, as apps
 may choose to use the to communicate low-priority information to the user.
+
 
 ### set_next_error_message
 
@@ -501,6 +512,8 @@ Arguments:
 
    * message: (string) Tell the user something
    * popup: (optional bool) Prefer an OSD/growl/popup style notification
+   * alert: (optional bool) Try harder to get the user's attention
+   * actions: (optional list of dicts) Actions relating to the notification
 
 This method should always try and display a message to the user, no matter
 which windows are visible:
@@ -509,6 +522,36 @@ which windows are visible:
    * If the splash screen is visible, display there
    * If the main window is visible, display there
    * ...?
+
+If a notifications has `"alert": true`, that is a signal to the GUI that
+it should flash a light, bounce an icon, vibrate or otherwise try to draw
+the user's attention to the app.
+
+If present, `actions` should be a list of dictionaries containing the same
+`label`, `op`, `args` and `position` arguments as are used in the main
+window actions.
+
+Since support for notification actions varies a great deal from platform to
+platform (and toolkit to toolkit), the caller must assume some or all items
+in `actions` will be silently ignored.  The list should be sorted by
+priority (most important first) and the caller should assume list
+processing may be truncated at any point or individual items skipped due to
+platform limitations.
+
+The `actions` list is likely to be ignored if `popup` is not set to True.
+
+GUI implementors should carefully consider the user experience of
+notification actions on their platform. It may be better to not implement
+`actions` at all than to provide confusing or destructive implementations.
+As an example, if an URL is to be opened in the browser, but the
+implementation cannot raise/focus/display the browser on click, it's
+probably best not to offer browser actions at all (confusion). Similarly,
+implementations that clobber pre-existing tabs in the user's browser should
+also be avoided (destructive).
+
+The presence (or absence) of an `actions` list should not alter the
+priority or placement of displayed notifications.
+
 
 ### show_url
 
@@ -529,9 +572,21 @@ Arguments:
 
    * command: (string) The shell command to launch
    * title: (optional string) The preferred terminal window title
-   * icon: (optional string) FS path or reference to an entry in `icons`
+   * icon: (optional string) FS path or reference to an entry in `images`
 
 Spawn a command in a visible terminal, so the user can interact with it.
+
+### set_http_cookie
+
+Arguments:
+
+   * domain: (string) The domain of the cookie being updated
+   * key: (string) A the cookie key
+   * value: (optional string) A new value for the cookie
+   * remove: (optional bool) If true, delete the cookie (ignore value)
+
+Modify or remove one of the HTTP cookies.
+
 
 ### quit
 
