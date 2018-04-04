@@ -394,18 +394,100 @@ class Window( object ):
         Stub text layer, need to add font handling.
         '''
 
-        def __init__( self, message, rect, style = win32con.DT_SINGLELINE ):
+        def __init__( self, text, rect, style = win32con.DT_SINGLELINE, font = None ):
             #win32gui.FillRect( hdc, paintStruct[2], win32con.COLOR_WINDOW )
-            self.message = message
+            self.text = text
             self.rect = rect
             self.style = style
+            self.font = font
+            self.height = None
+            self.roi = None
+
+        def _calc_roi( self, hdc ):
+            '''
+            Figure out where text is actually drawn given a rect and a hdc.
+
+            DT_CALCRECT disables drawing and updates the width parameter of the
+            rectangle(but only width!)
+
+            Use DT_LEFT, DT_RIGHT, DT_CENTER and DT_TOP, DT_BOTTOM, DT_VCENTER
+            to back out actual roi.
+            '''
+            # Height from DT_CALCRECT is strange...maybe troubleshoot later...
+            #height, roi = win32gui.DrawText( hdc,
+            #                                  self.text,
+            #                                  len( self.text ),
+            #                                  self.rect,
+            #                                  self.style | win32con.DT_CALCRECT )
+            #self.width = roi[2] - roi[0]
+            #print "roi {}".format( (self.width, self.height) )
+            
+            (self.width, self.height) = win32gui.GetTextExtentPoint32( hdc, self.text )
+
+            # Resolve text style against DC alignment
+            #
+            align = win32gui.GetTextAlign( hdc )
+
+            if self.style & win32con.DT_CENTER:
+                horizontal = win32con.TA_CENTER
+            elif self.style & win32con.DT_RIGHT:
+                horizontal = win32con.TA_RIGHT
+            elif self.style & win32con.DT_LEFT:
+                horizontal = win32con.TA_LEFT
+            else:
+                horizontal = align & ( win32gui.TA_LEFT | win32con.TA_RIGHT | win32con.TA_CENTER )
+
+            if self.style & win32con.DT_VCENTER:
+                vertical = win32con.VTA_CENTER
+            elif self.style & win32con.DT_BOTTOM:
+                vertical = win32con.TA_BOTTOM
+            elif self.style & win32con.DT_TOP:
+                vertical = win32con.TA_TOP
+            else:
+                vertical = align & ( win32gui.TA_TOP | win32con.TA_BOTTOM | win32con.VTA_CENTER )
+
+            # Calc ROI from resolved alignment
+            #
+            if horizontal == win32con.TA_CENTER:
+                x_min = (self.rect[ 2 ] + self.rect[ 0 ] - self.width)/2
+                x_max = x_min + self.width
+            elif horizontal == win32con.TA_RIGHT:
+                x_min = self.rect[ 2 ] - self.width
+                x_max = self.rect[ 2 ]
+            else: # horizontal == win32con.TA_LEFT
+                x_min = self.rect[ 0 ]
+                x_max = self.rect[ 0 ] + self.width
+
+            if vertical == win32con.VTA_CENTER:
+                y_min = (self.rect[ 1 ] + self.rect[ 3 ] - self.height)/2
+                y_max = y_min + self.height
+            elif vertical == win32con.TA_BOTTOM:
+                y_min = self.rect[ 3 ] - self.height
+                y_max = self.rect[ 3 ]
+            else: # vertical == win32con.TA_TOP
+                y_min = self.rect[ 1 ]
+                y_max = self.rect[ 1 ] + self.height
+    
+            self.roi = (x_min, y_min, x_max, y_max)
 
         def __call__( self, window, hdc, paint_struct ):
+            if self.font:
+                prior_font = win32gui.SelectObject( hdc, self.font )
+
+            self._calc_roi( hdc )
+
+            prior_bk_mode = win32gui.SetBkMode( hdc, win32con.TRANSPARENT )
+            
             win32gui.DrawText( hdc,
-                               self.message,
-                               len( self.message ),
+                               self.text,
+                               len( self.text ),
                                self.rect,
                                self.style )
+
+            win32gui.SetBkMode( hdc, prior_bk_mode )
+
+            if self.font:
+                win32gui.SelectObject( hdc, prior_font )
 
     class Control( Registry.AutoRegister ):
         '''
@@ -749,7 +831,7 @@ class WinapiGUI(BaseGUI):
         layout buttons, assuming the config declaration is in order.
         '''
         def button_items():
-            button_keys = map( lambda item: item['item'],
+            button_keys = map( lambda item: item['id'],
                                self.config['main_window']['actions'] )
             return map( lambda key: self.items[ key ], button_keys )
         window_size = self.main_window.get_client_region()
@@ -794,7 +876,7 @@ class WinapiGUI(BaseGUI):
 
     def create_action( self, control_factory, item ):
         action = Action( self,
-                         identifier = item['item'],
+                         identifier = item['id'],
                          label = item['label'],
                          operation = item.get('op'),
                          args = item.get('args'),
@@ -819,7 +901,7 @@ class WinapiGUI(BaseGUI):
         for item in self.config['indicator']['menu']:
             self.create_action( self.create_menu_control, item )
 
-        menu_items = [ self.items[ item['item'] ]['action'] for item in self.config['indicator']['menu'] ]
+        menu_items = [ self.items[ item['id'] ]['action'] for item in self.config['indicator']['menu'] ]
         self.systray_window.set_menu( menu_items )
 
         # actions
@@ -827,6 +909,50 @@ class WinapiGUI(BaseGUI):
             self.create_action( self.create_button_control, item )
 
         self.layout_buttons()
+
+    def create_font( self, points = 0, family = None, bold = False, italic = False ):
+        '''
+        Create font objects for configured fonts
+        '''
+        font_config = win32gui.LOGFONT()
+        font_config.lfHeight = points
+        font_config.lfWidth = 0
+        font_config.lfWeight = win32con.FW_BOLD if bold else win32con.FW_NORMAL
+        font_config.lfItalic = italic
+        font_config.lfCharSet = win32con.DEFAULT_CHARSET
+        font_config.lfOutPrecision = win32con.OUT_DEFAULT_PRECIS
+        font_config.lfClipPrecision = win32con.CLIP_DEFAULT_PRECIS
+        font_config.lfQuality = win32con.ANTIALIASED_QUALITY
+        font_config.lfPitchAndFamily = win32con.DEFAULT_PITCH | win32con.FF_DONTCARE
+
+        if family and family not in self.known_fonts:
+            print "Unknown font: '{}', using '{}'".format( family, self.default_font )
+            
+        font_config.lfFaceName =  family if family in self.known_fonts else self.default_font
+
+        return win32gui.CreateFontIndirect( font_config )
+
+    def create_fonts( self ):
+        '''
+        Create all font objects
+        '''
+        self.known_fonts = {}
+        def handle_font( font_config, text_metric, font_type, param ):
+            print font_config.lfFaceName
+            self.known_fonts[ font_config.lfFaceName ] = font_config
+            return True
+
+        hdc = win32gui.GetWindowDC( self.main_window.window_handle )
+        print "=== begin availalbe fonts ==="
+        win32gui.EnumFontFamilies( hdc, None, handle_font, None )
+        print "=== end available fonts ==="
+        self.default_font = win32gui.GetTextFace( hdc )
+        print "Default font: " + self.default_font
+        
+        win32gui.ReleaseDC( self.main_window.window_handle, hdc )
+        keys = ( 'title', 'details', 'notification', 'splash' )
+        font_config = self.config.get( 'font_styles', {} )
+        self.fonts = { key: self.create_font( **font_config.get(key, {}) ) for key in keys }
 
     def run( self ):
         '''
@@ -837,8 +963,6 @@ class WinapiGUI(BaseGUI):
         self.appid = unicode( uuid.uuid4() )
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(self.appid)
         win32gui.InitCommonControls()
-
-
             
         self.systray_window = Window(title = self.config['app_name'],
                                      style = Window.systray_style)
@@ -851,6 +975,9 @@ class WinapiGUI(BaseGUI):
         self.main_window = Window(title = self.config['app_name'],
                                   style = Window.main_window_style,
                                   size = window_size )
+
+        # need a window to query available fonts
+        self.create_fonts()
         
         window_roi = win32gui.GetClientRect( self.main_window.window_handle )
         window_size = tuple( window_roi[2:] )
@@ -897,7 +1024,7 @@ class WinapiGUI(BaseGUI):
     def terminal(self, command='/bin/bash', title=None, icon=None):
         print( "FIXME: Terminal not supported!" )
 
-    def set_status(self, status='startup'):
+    def set_status(self, status='startup', badge = 'ignored'):
         icon_path = self._resolve_variables( self.config['icons'][status] )
         small_icon = Image.IconSmall( icon_path )
         large_icon = Image.IconLarge( icon_path )
@@ -914,27 +1041,30 @@ class WinapiGUI(BaseGUI):
         win32gui.PostQuitMessage(0)     
         raise KeyboardInterrupt("User quit")
 
-    def set_item_label(self, item=None, label=None):
-        action = self.items[item]['action']
-        action.label = label
-        control = self.items[item]['control']
+    def set_item(self, id=None, label=None, sensitive = None):
+        action = self.items[id]['action']
+        if label:
+            action.label = label
+        if sensitive is not None:
+            action.sensitive = sensitive
+            
+        control = self.items[id]['control']
         if control:
             control.set_action( action )
             self.layout_buttons()
-
-    def set_item_sensitive(self, item=None, sensitive=True):
-        action = self.items[item]['action']
-        action.sensitive = sensitive
-        control = self.items[item]['control']
-        if control:
-            control.set_action( action )
         
-    def set_substatus(self, substatus=None, label=None, hint=None, icon=None, color=None):
+    def set_status_display(self, id=None, title=None, details=None, icon=None, color=None):
         pass
 
     def update_splash_screen(self, message=None, progress=None):
         if progress:
             self.progress_bar.set_pos( self._progress_range * progress )
+        if message:
+            self.splash_text.text = message
+            print "redraw: {}".format( self.splash_text.roi )
+            win32gui.InvalidateRect( self.splash_screen.window_handle,
+                                     self.splash_text.roi,
+                                     True )
 
     def set_next_error_message(self, message=None):
         self.next_error_message = message
@@ -948,7 +1078,8 @@ class WinapiGUI(BaseGUI):
 
     def show_splash_screen(self, height=None, width=None,
                            progress_bar=False, image=None,
-                           message=None, message_x=0.5, message_y=0.5):
+                           message='', message_x=0.5, message_y=0.5):
+        # TODO: Handle height/width as None
         window_roi = win32gui.GetClientRect( self.splash_screen.window_handle )
         window_size = tuple( window_roi[2:] )
         
@@ -960,7 +1091,16 @@ class WinapiGUI(BaseGUI):
         image = PIL.Image.open( self.get_image_path( image ) )
         image = image.convert('RGBA')
         image = image.resize( window_size, PIL.Image.ANTIALIAS )
-        self.splash_screen.layers = [ Window.ImageBlendLayer( image ) ]
+
+        self.splash_text = Window.TextLayer( message,
+                                             window_roi,
+                                             style = win32con.DT_SINGLELINE |
+                                                     win32con.DT_CENTER |
+                                                     win32con.DT_VCENTER,
+                                             font = self.fonts['splash'] )
+        
+        self.splash_screen.layers = [ Window.ImageBlendLayer( image ),
+                                      self.splash_text ]
 
         if progress_bar:
             self.progress_bar = Window.ProgressBar( self.splash_screen )
@@ -969,7 +1109,6 @@ class WinapiGUI(BaseGUI):
 
         self.splash_screen.center()
         self.splash_screen.set_visibility( True )
-        print( "show splash" )
 
     def hide_splash_screen(self):
         self.splash_screen.set_visibility( False )
@@ -988,7 +1127,7 @@ class WinapiGUI(BaseGUI):
                 (self.next_error_message or 'Error: %(error)s')
                 % {'error': unicode(e)})
 
-    def notify_user(self, message='Hello', popup=False):
+    def notify_user(self, message='Hello', popup=False, alert = False, actions = []):
         print('NOTIFY: %s' % message)
 
 GUI = WinapiGUI
