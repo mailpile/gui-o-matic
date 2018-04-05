@@ -409,7 +409,7 @@ class Window( object ):
         '''
 
         def __init__( self, text, rect, style = win32con.DT_SINGLELINE, font = None ):
-            #win32gui.FillRect( hdc, paintStruct[2], win32con.COLOR_WINDOW )
+            assert( isinstance( style, int ) )
             self.text = text
             self.rect = rect
             self.style = style
@@ -490,6 +490,7 @@ class Window( object ):
                 y_max = self.rect[ 1 ] + self.height
     
             self.roi = (x_min, y_min, x_max, y_max)
+            return self.roi
 
         def __call__( self, window, hdc, paint_struct ):
             if self.font:
@@ -848,7 +849,22 @@ class WinapiGUI(BaseGUI):
         self.items = {}
 
     def layout_displays( self ):
-        pass
+        '''
+        layout displays top-to-bottom, placing notification text after
+        '''
+        rect = self.main_window.get_client_region()
+        hdc = win32gui.GetWindowDC( self.main_window.window_handle )
+        def display_keys():
+            items = self.config['main_window']['status_displays']
+            return map( lambda item: item['id'], items )
+
+        for key in display_keys():
+            display = self.displays[ key ]
+            rect = display.layout( hdc, rect )
+
+
+        self.notification_text.rect = rect
+        win32gui.ReleaseDC( self.main_window.window_handle, hdc )
 
     def layout_buttons( self ):
         '''
@@ -981,18 +997,17 @@ class WinapiGUI(BaseGUI):
     class StatusDisplay( object ):
 
         def __init__( self, id, icon, title, details, gui ):
-            self.title = Window.TextLayer( title,
-                                           (0,0,0,0),
+            self.title = Window.TextLayer( text = title,
+                                           rect = (0,0,0,0),
                                            font = gui.fonts[ 'title' ] )
-            self.details = Window.TextLayer( details,
-                                           (0,0,0,0),                                   (0,0,0,0),
-                                           font = gui.fonts[ 'details' ] )
+            self.details = Window.TextLayer( text = details,
+                                             rect = (0,0,0,0),
+                                             font = gui.fonts[ 'details' ] )
             self.icon = Window.BitmapLayer( Image.Bitmap( gui.get_image_path( icon ) ) )
 
             self.id = id
 
-        def layout( self, window, rect ):
-            hdc = win32gui.GetWindowDC( window.window_handle )
+        def layout( self, hdc, rect ):
             self.title.rect = rect
             title_roi = self.title.calc_roi( hdc )
             self.details.rect = (rect[0], title_roi[3], rect[2], rect[3])
@@ -1020,8 +1035,6 @@ class WinapiGUI(BaseGUI):
                             details_roi[3])
 
             self.details.rect = details_rect
-            
-            win32gui.ReleaseDC( window.window_handle, hdc )
 
             return (rect[0],
                     details_rect[3],
@@ -1033,6 +1046,10 @@ class WinapiGUI(BaseGUI):
         create status displays and do layout
         '''
         self.displays = { item['id']: self.StatusDisplay( gui = self, **item ) for item in self.config['main_window']['status_displays'] }
+
+        for display in self.displays.values():
+            layers = ( display.title, display.icon, display.details )
+            self.main_window.layers.extend( layers )
 
     def run( self ):
         '''
@@ -1058,7 +1075,6 @@ class WinapiGUI(BaseGUI):
 
         # need a window to query available fonts
         self.create_fonts()
-        self.create_displays()
         
         window_roi = win32gui.GetClientRect( self.main_window.window_handle )
         window_size = tuple( window_roi[2:] )
@@ -1075,6 +1091,8 @@ class WinapiGUI(BaseGUI):
                                             font = self.fonts['notification'])
 
         self.main_window.layers.append( self.notification_text )
+        self.create_displays()
+        self.layout_displays()
         
         self.main_window.set_visibility( self.config['main_window']['show'] )
         
