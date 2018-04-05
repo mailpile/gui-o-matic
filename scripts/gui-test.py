@@ -74,12 +74,23 @@ script = {
     "app_name": "Indicator Test",
     "app_icon": "{basedir}/img/gt-normal-%(theme)s.png",
     "_prefer_gui": ["unity", "macosx", "winapi"],
-    "icons": {
+    "images": {
         "startup": "{basedir}/img/gt-startup-%(theme)s.png",
         "normal": "{basedir}/img/gt-normal-%(theme)s.png",
         "working": "{basedir}/img/gt-working-%(theme)s.png",
         "attention": "{basedir}/img/gt-attention-%(theme)s.png",
         "shutdown": "{basedir}/img/gt-shutdown-%(theme)s.png"
+    },
+    "font_styles": {
+        "title": {
+            "family": "normal",
+            "points": 18,
+            "bold": True
+        },
+        "details": {
+            "points": 10,
+            "italic": True
+        },
     },
     "main_window": {
         "show": False,
@@ -110,8 +121,20 @@ script = {
                 "sensitive": True,
                 "op": "quit"
             }
+        ],
+        "status_displays": [
+            {
+                "id": "internal-identifying-name",
+                "icon": "image:working",
+                "title": "Hello world!",
+                "details": "Greetings and salutations to all!"
+            },{
+                "id": "id2",
+                "icon": "image:attention",
+                "title": "Launching Frobnicator",
+                "details": "The beginning and end of all things"
+            }
         ]
-
     },
     "indicator": {
         "menu": [
