@@ -30,6 +30,13 @@ PIL.Image.register_save( BMP_FORMAT, pil_bmp_fix._save )
 
 from gui_o_matic.gui.base import BaseGUI
 
+def rect_intersect( rect_a, rect_b ):
+    x_min = max(rect_a[0], rect_b[0])
+    y_min = max(rect_a[1], rect_b[1])
+    x_max = min(rect_a[2], rect_b[2])
+    y_max = min(rect_a[3], rect_b[3])
+    return (x_min, y_min, x_max, y_max)
+
 class Image( object ):
     '''
     Helper class for importing arbitrary graphics to winapi bitmaps. Mode is a
@@ -110,7 +117,11 @@ class Image( object ):
           number: scale image size
           tuple: transform image size
         '''
-        source = PIL.Image.open( path )
+        if isinstance( path, PIL.Image.Image ):
+            source = path
+        else:
+            source = PIL.Image.open( path )
+            
         if source.mode != 'RGBA':
             source = source.convert( 'RGBA' )
         if size:
@@ -150,6 +161,57 @@ class Image( object ):
         #self.mode[2]( self.handle )
         pass
 
+class Compositor( object ):
+    '''
+    Alpha-blend compatability class.
+
+    Since we're having trouble getting alpha into winapi objects, blend images
+    in python, then move them out to winapi as RGB
+    '''
+
+    class Operation( object ):
+        '''
+        Applies and effect to an image
+        '''
+
+    class Fill( Operation ):
+        '''
+        Stretches the target region with the specified color.
+        '''
+
+        def __init__( self, color, rect = None ):
+            self.rect = rect
+            self.color = color
+
+        def __call__( self, image ):
+            rect = self.rect or (0, 0, image.width, image.height)
+            image.paste( self.color, rect )
+            
+    class Blend( Operation ):
+
+        def __init__( self, source, rect = None ):
+            self.source = source if source.mode == "RGBA" else source.convert("RGBA")
+            self.rect = rect
+
+        def __call__( self, image ):
+            rect = self.rect or (0, 0, image.width, image.height)
+            dst_size = (rect[2] - rect[0], rect[3] - rect[1])
+            if dst_size != self.source.size:
+                scaled = self.source.resize( dst_size, PIL.Image.ANTIALIAS )
+            else:
+                scaled = self.source
+            dst = image.crop( rect )
+            blend = dst.alpha_composite( scaled )
+            image.paste( dst, rect )
+
+    def render( self, size, background = (0,0,0,0) ):
+        image = PIL.Image.new( "RGBA", size, background )
+        for operation in self.operations:
+            operation( image )
+        return image
+
+    def __init__( self ):
+        self.operations = []
 
 class Registry( object ):
     '''
@@ -255,20 +317,60 @@ class Window( object ):
         Implement __call__ to update the window as desired.
         '''
 
-        @staticmethod
-        def intersect( rect_a, rect_b ):
-            
-            x_min = max(rect_a[0], rect_b[0])
-            y_min = max(rect_a[1], rect_b[1])
-            x_max = min(rect_a[2], rect_b[2])
-            y_max = min(rect_a[3], rect_b[3])
-            return (x_min,
-                    y_min,
-                    x_max,
-                    y_max)
-
         def __call__( self, window, hdc, paint_struct ):
             raise NotImplementedError
+
+    class CompositorLayer( Layer, Compositor ):
+
+        def __init__( self, rect = None, background = None ):
+            super(Window.CompositorLayer, self).__init__()
+            self.image = None
+            self.rect = rect
+            self.background = background
+
+        def update( self, window, hdc ):
+            rect = self.rect or window.get_client_region()
+            background = self.background or win32gui.GetPixel( hdc, rect[0], rect[1] )
+            color = ((background >> 0 ) & 255,
+                     (background >> 8 ) & 255,
+                     (background >> 16 ) & 255,
+                     255)
+            size = ( rect[2] - rect[0], rect[3] - rect[1] )
+            combined = self.render( size, color )
+            self.image = Image.Bitmap( combined )
+            self.invalid = False
+
+        def dirty( self, window ):
+            rect = self.rect or window.get_client_region()
+            size = ( rect[2] - rect[0], rect[3] - rect[1] )
+            return self.image is None or self.image.size != size
+
+        def invalidate( self ):
+            self.image = None
+            
+        def __call__( self, window, hdc, paint_struct ):
+            if self.dirty( window ):
+                self.update( window, hdc )
+
+            rect = self.rect or window.get_client_region()
+            roi = rect_intersect( rect, paint_struct[2] )
+            print( "copying to {}".format( roi ))
+            hdc_mem = win32gui.CreateCompatibleDC( hdc )
+            prior_bitmap = win32gui.SelectObject( hdc_mem, self.image.handle )
+
+            win32gui.BitBlt( hdc,
+                             roi[0],
+                             roi[1],
+                             roi[2] - roi[0],
+                             roi[3] - roi[1],
+                             hdc_mem,
+                             roi[0] - rect[0],
+                             roi[1] - rect[1],
+                             win32con.SRCCOPY )            
+
+            win32gui.SelectObject( hdc_mem, prior_bitmap )
+            win32gui.DeleteDC( hdc_mem )
+        
 
     class ImageBlendLayer( Layer ):
         '''
@@ -289,6 +391,7 @@ class Window( object ):
         '''
 
         def __init__( self, image, src_offset = (0,0), dst_offset = (0,0), size = None ):
+            super(Window.ImageBlendLayer, self).__init__()
             self.image = image
             self.src_offset = src_offset 
             self.dst_offset = dst_offset
@@ -319,7 +422,7 @@ class Window( object ):
                       self.dst_offset[ 1 ],
                       self.dst_offset[ 0 ] + self.size[ 0 ],
                       self.dst_offset[ 1 ] + self.size[ 1 ])
-            overlap = self.intersect( roi, target )
+            overlap = rect_intersect( roi, target )
 
             x_range = (overlap[ 0 ] - self.dst_offset[ 0 ],
                        overlap[ 2 ] - self.dst_offset[ 0 ])
@@ -359,6 +462,7 @@ class Window( object ):
         '''
 
         def __init__( self, bitmap, src_roi = None, dst_roi = None, blend = None ):
+            super(Window.BitmapLayer, self).__init__()
             self.bitmap = bitmap
             self.src_roi = src_roi
             self.dst_roi = dst_roi
@@ -1010,7 +1114,7 @@ class WinapiGUI(BaseGUI):
             self.details = Window.TextLayer( text = details,
                                              rect = (0,0,0,0),
                                              font = gui.fonts[ 'details' ] )
-            self.icon = Window.BitmapLayer( Image.Bitmap( gui.get_image_path( icon ) ) )
+            self.icon = Compositor.Blend( PIL.Image.open( gui.get_image_path( icon ) ) )
 
             self.id = id
 
@@ -1027,10 +1131,7 @@ class WinapiGUI(BaseGUI):
                         rect[0] + text_height,
                         rect[1] + text_height)
 
-            print icon_roi
-            print text_height
-
-            self.icon.dst_roi = icon_roi
+            self.icon.rect = icon_roi
 
             title_roi = (rect[0] + text_height + spacing,
                          title_roi[1],
@@ -1046,6 +1147,8 @@ class WinapiGUI(BaseGUI):
 
             self.details.rect = details_rect
 
+            self.rect = (rect[0], rect[1], details_rect[3], rect[3])
+
             return (rect[0],
                     details_rect[3],
                     rect[2],
@@ -1058,8 +1161,9 @@ class WinapiGUI(BaseGUI):
         self.displays = { item['id']: self.StatusDisplay( gui = self, **item ) for item in self.config['main_window']['status_displays'] }
 
         for display in self.displays.values():
-            layers = ( display.title, display.icon, display.details )
+            layers = ( display.title, display.details )
             self.main_window.layers.extend( layers )
+            self.compositor.operations.append( display.icon )
 
     def run( self ):
         '''
@@ -1083,6 +1187,9 @@ class WinapiGUI(BaseGUI):
                                   style = Window.main_window_style,
                                   size = window_size )
 
+        self.compositor = Window.CompositorLayer()
+        self.main_window.layers.append( self.compositor )
+        
         # need a window to query available fonts
         self.create_fonts()
         
@@ -1090,9 +1197,8 @@ class WinapiGUI(BaseGUI):
         window_size = tuple( window_roi[2:] )
         try:
             background_path = self.get_image_path( self.config['main_window']['image'] )
-            bitmap = Image.Bitmap( background_path, size = window_size, debug = 'debug.bmp' )
-            background = Window.BitmapLayer( bitmap )
-            self.main_window.layers.append( background )
+            background = PIL.Image.open( background_path )
+            self.compositor.operations.append( Compositor.Blend( background ) )
         except KeyError:
             pass
 
@@ -1167,11 +1273,20 @@ class WinapiGUI(BaseGUI):
         display = self.displays[ id ]
         if title is not None:
             display.title.text = title
+            win32gui.InvalidateRect( self.main_window.window_handle,
+                                     display.rect,
+                                     True )
         if details is not None:
             display.details.text = details
+            win32gui.InvalidateRect( self.main_window.window_handle,
+                                     display.rect,
+                                     True )
         if icon is not None:
-            bitmap = Image.Bitmap( self.get_image_path( icon ) )
-            display.icon.bitmap = bitmap
+            display.icon.image = PIL.image.open( icon )
+            self.compositor.invalidate()
+            win32gui.InvalidateRect( self.main_window.window_handle,
+                                     display.rect,
+                                     True )
 
     def update_splash_screen(self, message=None, progress=None):
         if progress:
@@ -1205,8 +1320,15 @@ class WinapiGUI(BaseGUI):
         #background = Window.BitmapLayer( bitmap )
         
         image = PIL.Image.open( self.get_image_path( image ) )
+        background = Window.CompositorLayer()
+        background.operations.append( Compositor.Blend( image ) )
+        
+
+        ''''
         image = image.convert('RGBA')
         image = image.resize( window_size, PIL.Image.ANTIALIAS )
+        background = Window.ImageBlendLayer( image )
+        '''
 
         self.splash_text = Window.TextLayer( message,
                                              window_roi,
@@ -1215,7 +1337,7 @@ class WinapiGUI(BaseGUI):
                                                      win32con.DT_VCENTER,
                                              font = self.fonts['splash'] )
         
-        self.splash_screen.layers = [ Window.ImageBlendLayer( image ),
+        self.splash_screen.layers = [ background,
                                       self.splash_text ]
 
         if progress_bar:
