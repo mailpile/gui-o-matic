@@ -377,13 +377,13 @@ class Window( object ):
             win32gui.AlphaBlend( hdc,
                                  dst_roi[ 0 ],
                                  dst_roi[ 1 ],
-                                 dst_roi[ 2 ],
-                                 dst_roi[ 3 ],
+                                 dst_roi[ 2 ] - dst_roi[ 0 ],
+                                 dst_roi[ 3 ] - dst_roi[ 1 ],
                                  hdc_mem,
                                  src_roi[ 0 ],
                                  src_roi[ 1 ],
-                                 src_roi[ 2 ],
-                                 src_roi[ 3 ],
+                                 src_roi[ 2 ] - src_roi[ 0 ],
+                                 src_roi[ 3 ] - src_roi[ 1 ],
                                  blend )
             '''
             # Blit without alpha channel blending
@@ -848,11 +848,15 @@ class WinapiGUI(BaseGUI):
         self.statuses = {}
         self.items = {}
 
-    def layout_displays( self ):
+    def layout_displays( self, spacing = 10 ):
         '''
         layout displays top-to-bottom, placing notification text after
         '''
         rect = self.main_window.get_client_region()
+        rect = (rect[0] + spacing,
+                rect[1] + spacing,
+                rect[2] - 2 * spacing,
+                rect[3] - 2 * spacing)
         hdc = win32gui.GetWindowDC( self.main_window.window_handle )
         def display_keys():
             items = self.config['main_window']['status_displays']
@@ -860,8 +864,11 @@ class WinapiGUI(BaseGUI):
 
         for key in display_keys():
             display = self.displays[ key ]
-            rect = display.layout( hdc, rect )
-
+            rect = display.layout( hdc, rect, spacing )
+            rect = (rect[0],
+                    rect[1] + spacing,
+                    rect[2],
+                    rect[3])
 
         self.notification_text.rect = rect
         win32gui.ReleaseDC( self.main_window.window_handle, hdc )
@@ -1007,7 +1014,7 @@ class WinapiGUI(BaseGUI):
 
             self.id = id
 
-        def layout( self, hdc, rect ):
+        def layout( self, hdc, rect, spacing ):
             self.title.rect = rect
             title_roi = self.title.calc_roi( hdc )
             self.details.rect = (rect[0], title_roi[3], rect[2], rect[3])
@@ -1020,16 +1027,19 @@ class WinapiGUI(BaseGUI):
                         rect[0] + text_height,
                         rect[1] + text_height)
 
+            print icon_roi
+            print text_height
+
             self.icon.dst_roi = icon_roi
 
-            title_roi = (rect[0] + text_height,
+            title_roi = (rect[0] + text_height + spacing,
                          title_roi[1],
                          rect[2],
                          title_roi[3])
 
             self.title.rect = title_roi
 
-            details_rect = (rect[0] + text_height,
+            details_rect = (rect[0] + text_height + spacing,
                             details_roi[1],
                             rect[2],
                             details_roi[3])
@@ -1153,8 +1163,15 @@ class WinapiGUI(BaseGUI):
             control.set_action( action )
             self.layout_buttons()
         
-    def set_status_display(self, id=None, title=None, details=None, icon=None, color=None):
-        pass
+    def set_status_display(self, id, title=None, details=None, icon=None, color=None):
+        display = self.displays[ id ]
+        if title is not None:
+            display.title.text = title
+        if details is not None:
+            display.details.text = details
+        if icon is not None:
+            bitmap = Image.Bitmap( self.get_image_path( icon ) )
+            display.icon.bitmap = bitmap
 
     def update_splash_screen(self, message=None, progress=None):
         if progress:
