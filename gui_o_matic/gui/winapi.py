@@ -521,6 +521,23 @@ class Window( object ):
             self.height = None
             self.roi = None
 
+        def set_props( self, window = None, **kwargs ):
+
+            if window and self.roi:
+                win32gui.InvalidateRect( window.window_handle,
+                                         self.roi, True )
+
+            for key in ('text','rect','style','font'):
+                if key in kwargs:
+                    setattr( self, key, kwargs[ key ] )
+                    
+            if window:
+                hdc = win32gui.GetWindowDC( window.window_handle )
+                roi = self.calc_roi( hdc )
+                win32gui.ReleaseDC( window.window_handle, hdc )
+                win32gui.InvalidateRect( window.window_handle,
+                                         roi, True )
+
         def calc_roi( self, hdc ):
             '''
             Figure out where text is actually drawn given a rect and a hdc.
@@ -803,29 +820,41 @@ class Window( object ):
                              win32con.ICON_SMALL,
                              small_icon.handle )
 
+
+    def show_toast( self, title, baloon, timeout ):
+        if self.small_icon:
+            message = win32gui.NIM_MODIFY
+            data = (self.window_handle,
+                    0,
+                    win32gui.NIF_INFO | win32gui.NIF_ICON | win32gui.NIF_MESSAGE | win32gui.NIF_TIP,
+                    self._notify_event_id,
+                    self.small_icon.handle,
+                    self.text,
+                    baloon,
+                    int(timeout * 1000),
+                    title)
+            print data
+            win32gui.Shell_NotifyIcon( message, data )
+        else:
+            print "Can't send popup without systray!"
+
     def set_systray( self, small_icon = None, text = '' ):
         if small_icon:
+            self.small_icon = small_icon
+            self.text = text
             message = win32gui.NIM_MODIFY if self.systray else win32gui.NIM_ADD
             data = (self.window_handle,
-                          0,
-                          win32gui.NIF_ICON | win32gui.NIF_MESSAGE | win32gui.NIF_TIP,
-                          self._notify_event_id,
-                          small_icon.handle,
-                          text)
+                    0,
+                    win32gui.NIF_ICON | win32gui.NIF_MESSAGE | win32gui.NIF_TIP,
+                    self._notify_event_id,
+                    self.small_icon.handle,
+                    self.text)
         elif self.systray:
             message = win32gui.NIM_DELETE
             data = (self.window_handle, 0)
         else:
             message = None
             data = tuple()
-
-        lookup = {
-            win32gui.NIM_MODIFY: "modify",
-            win32gui.NIM_ADD: "add",
-            win32gui.NIM_DELETE: "delete",
-            None: 'no-op'
-        }
-        #print( "{}: {}".format( lookup[ message ], data ) )
 
         self.systray = True if small_icon else False
 
@@ -1212,12 +1241,12 @@ class WinapiGUI(BaseGUI):
         
         self.main_window.set_visibility( self.config['main_window']['show'] )
         
-        self.splash_screen = Window(title = self.config['app_name'],
+        self.splash_window = Window(title = self.config['app_name'],
                                     style = Window.splash_screen_style,
                                     size = window_size )
 
         self.windows = [ self.main_window,
-                         self.splash_screen,
+                         self.splash_window,
                          self.systray_window ]
 
         self.set_status( 'normal' )
@@ -1272,15 +1301,11 @@ class WinapiGUI(BaseGUI):
     def set_status_display(self, id, title=None, details=None, icon=None, color=None):
         display = self.displays[ id ]
         if title is not None:
-            display.title.text = title
-            win32gui.InvalidateRect( self.main_window.window_handle,
-                                     display.rect,
-                                     True )
+            display.title.set_prop( self.main_window, text = title )
+            
         if details is not None:
-            display.details.text = details
-            win32gui.InvalidateRect( self.main_window.window_handle,
-                                     display.rect,
-                                     True )
+            display.details.set_prop( self.main_window, text = details )
+            
         if icon is not None:
             display.icon.image = PIL.image.open( icon )
             self.compositor.invalidate()
@@ -1292,11 +1317,7 @@ class WinapiGUI(BaseGUI):
         if progress:
             self.progress_bar.set_pos( self._progress_range * progress )
         if message:
-            self.splash_text.text = message
-            print "redraw: {}".format( self.splash_text.roi )
-            win32gui.InvalidateRect( self.splash_screen.window_handle,
-                                     self.splash_text.roi,
-                                     True )
+            self.splash_text.set_props( self.splash_window, text = message )
 
     def set_next_error_message(self, message=None):
         self.next_error_message = message
@@ -1312,7 +1333,7 @@ class WinapiGUI(BaseGUI):
                            progress_bar=False, image=None,
                            message='', message_x=0.5, message_y=0.5):
         # TODO: Handle height/width as None
-        window_roi = win32gui.GetClientRect( self.splash_screen.window_handle )
+        window_roi = win32gui.GetClientRect( self.splash_window.window_handle )
         window_size = tuple( window_roi[2:] )
         
         #bitmap = Image.Bitmap( self.get_image_path( image ),
@@ -1337,19 +1358,19 @@ class WinapiGUI(BaseGUI):
                                                      win32con.DT_VCENTER,
                                              font = self.fonts['splash'] )
         
-        self.splash_screen.layers = [ background,
+        self.splash_window.layers = [ background,
                                       self.splash_text ]
 
         if progress_bar:
-            self.progress_bar = Window.ProgressBar( self.splash_screen )
+            self.progress_bar = Window.ProgressBar( self.splash_window )
             self.progress_bar.set_range( self._progress_range )
             self.progress_bar.set_step( 1 )
 
-        self.splash_screen.center()
-        self.splash_screen.set_visibility( True )
+        self.splash_window.center()
+        self.splash_window.set_visibility( True )
 
     def hide_splash_screen(self):
-        self.splash_screen.set_visibility( False )
+        self.splash_window.set_visibility( False )
         if hasattr( self, 'progress_bar' ):
             del self.progress_bar
 
@@ -1366,10 +1387,22 @@ class WinapiGUI(BaseGUI):
                 % {'error': unicode(e)})
 
     def notify_user(self, message, popup=False, alert = False, actions = []):
-        self.notification_text.text = message
-        win32gui.InvalidateRect( self.main_window.window_handle,
-                                 self.notification_text.roi,
-                                 True )
+        if alert:
+            win32gui.FlashWindowEx( self.main_window.window_handle,
+                                    win32con.FLASHW_TRAY | win32con.FLASHW_TIMERNOFG,
+                                    0,
+                                    0)
+
+        if popup:
+            self.systray_window.show_toast( self.config[ 'app_name' ],
+                                            message, 60 )
+            
+        self.notification_text.set_props( self.main_window,
+                                          text = message )
+        
+        self.splash_text.set_props( self.splash_window,
+                                    text = message )
+
         print('NOTIFY: %s' % message)
 
 GUI = WinapiGUI
