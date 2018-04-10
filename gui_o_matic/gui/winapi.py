@@ -20,6 +20,7 @@ import traceback
 import atexit
 import itertools
 import struct
+import threading
 
 import pil_bmp_fix
 
@@ -190,8 +191,11 @@ class Compositor( object ):
     class Blend( Operation ):
 
         def __init__( self, source, rect = None ):
-            self.source = source if source.mode == "RGBA" else source.convert("RGBA")
+            self.set_image( source )
             self.rect = rect
+
+        def set_image( self, source ):
+            self.source = source if source.mode == "RGBA" else source.convert("RGBA")
 
         def __call__( self, image ):
             rect = self.rect or (0, 0, image.width, image.height)
@@ -256,7 +260,7 @@ class Action( Registry.AutoRegister ):
     '''
 
 
-    def __init__( self, gui, identifier, label, operation = None, sensitive = False, args = None ):
+    def __init__( self, gui, identifier, label, operation = None, sensitive = True, args = None ):
         '''
         Bind the action state to the gui for later invocation or modification.
         '''
@@ -330,7 +334,15 @@ class Window( object ):
 
         def update( self, window, hdc ):
             rect = self.rect or window.get_client_region()
-            background = self.background or win32gui.GetPixel( hdc, rect[0], rect[1] )
+            try:
+                background = self.background or win32gui.GetPixel( hdc, rect[0], rect[1] )
+                self.last_background = background
+            except:
+                print "FIXME: Figure out why GetPixel( hdc, 0, 0 ) is failing..."
+                #traceback.print_exc()
+                #print "GetLastError() => {}".format( win32api.GetLastError() )
+                background = self.last_background
+                
             color = ((background >> 0 ) & 255,
                      (background >> 8 ) & 255,
                      (background >> 16 ) & 255,
@@ -338,23 +350,26 @@ class Window( object ):
             size = ( rect[2] - rect[0], rect[3] - rect[1] )
             combined = self.render( size, color )
             self.image = Image.Bitmap( combined )
-            self.invalid = False
+            print "Updated from: {}".format( threading.current_thread() )
+
 
         def dirty( self, window ):
             rect = self.rect or window.get_client_region()
             size = ( rect[2] - rect[0], rect[3] - rect[1] )
-            return self.image is None or self.image.size != size
+            result = self.image is None or self.image.size != size
+            return result
 
         def invalidate( self ):
+            print "Invalidated from: {}".format( threading.current_thread() )
             self.image = None
             
         def __call__( self, window, hdc, paint_struct ):
-            if self.dirty( window ):
+            dirty = self.dirty( window )
+            if dirty:
                 self.update( window, hdc )
 
             rect = self.rect or window.get_client_region()
             roi = rect_intersect( rect, paint_struct[2] )
-            print( "copying to {}".format( roi ))
             hdc_mem = win32gui.CreateCompatibleDC( hdc )
             prior_bitmap = win32gui.SelectObject( hdc_mem, self.image.handle )
 
@@ -1063,7 +1078,7 @@ class WinapiGUI(BaseGUI):
                          label = item['label'],
                          operation = item.get('op'),
                          args = item.get('args'),
-                         sensitive = item.get('sensitive', False))
+                         sensitive = item.get('sensitive', True))
         control = control_factory( action )
         self.items[action.identifier] = dict( action = action, control = control )
 
@@ -1146,7 +1161,7 @@ class WinapiGUI(BaseGUI):
 
     class StatusDisplay( object ):
 
-        def __init__( self, gui, id, icon, title, details = '' ):
+        def __init__( self, gui, id, icon, title = ' ', details = ' ' ):
             self.title = Window.TextLayer( text = title,
                                            rect = (0,0,0,0),
                                            font = gui.fonts[ 'title' ] )
@@ -1235,7 +1250,7 @@ class WinapiGUI(BaseGUI):
         window_roi = win32gui.GetClientRect( self.main_window.window_handle )
         window_size = tuple( window_roi[2:] )
         try:
-            background_path = self.get_image_path( self.config['main_window']['image'] )
+            background_path = self.get_image_path( self.config['main_window']['background'] )
             background = PIL.Image.open( background_path )
             self.compositor.operations.append( Compositor.Blend( background ) )
         except KeyError:
@@ -1254,6 +1269,13 @@ class WinapiGUI(BaseGUI):
         self.splash_window = Window(title = self.config['app_name'],
                                     style = Window.splash_screen_style,
                                     size = window_size )
+        
+        self.splash_text = Window.TextLayer( text = '',
+                                             rect = (0,0,0,0),
+                                             style = win32con.DT_SINGLELINE |
+                                                     win32con.DT_CENTER |
+                                                     win32con.DT_VCENTER,
+                                             font = self.fonts['splash'] )
 
         self.windows = [ self.main_window,
                          self.splash_window,
@@ -1274,7 +1296,8 @@ class WinapiGUI(BaseGUI):
         # Enter run loop
         #
         self.ready = True
-        win32gui.PumpMessages()
+        while win32gui.PumpWaitingMessages() == 0:
+            pass
         
     def terminal(self, command='/bin/bash', title=None, icon=None):
         print( "FIXME: Terminal not supported!" )
@@ -1311,13 +1334,13 @@ class WinapiGUI(BaseGUI):
     def set_status_display(self, id, title=None, details=None, icon=None, color=None):
         display = self.displays[ id ]
         if title is not None:
-            display.title.set_prop( self.main_window, text = title )
+            display.title.set_props( self.main_window, text = title )
             
         if details is not None:
-            display.details.set_prop( self.main_window, text = details )
+            display.details.set_props( self.main_window, text = details )
             
         if icon is not None:
-            display.icon.image = PIL.image.open( icon )
+            display.icon.image = PIL.Image.open( self.get_image_path( icon ) )
             self.compositor.invalidate()
             win32gui.InvalidateRect( self.main_window.window_handle,
                                      display.rect,
@@ -1387,13 +1410,6 @@ class WinapiGUI(BaseGUI):
         width = window_roi[2] - window_roi[0]
         height = window_roi[3] - window_roi[1]
 
-        self.splash_text = Window.TextLayer( text = message,
-                                             rect = window_roi,
-                                             style = win32con.DT_SINGLELINE |
-                                                     win32con.DT_CENTER |
-                                                     win32con.DT_VCENTER,
-                                             font = self.fonts['splash'] )
-
         text_center = (window_roi[0] + int((window_roi[2] - window_roi[0]) * message_x),
                        window_roi[1] + int((window_roi[3] - window_roi[1]) * message_y))
         width_pad = min(window_roi[2] - text_center[0],
@@ -1406,9 +1422,11 @@ class WinapiGUI(BaseGUI):
                     text_center[0] + width_pad,
                     text_center[1] + height_pad)
 
-        self.splash_text.set_props( self.splash_window, rect = text_roi )
-        self.splash_window.layers = [ background,
-                                      self.splash_text ]
+        text_props = { 'rect': text_roi }
+        if message:
+            text_props['text'] = message
+        self.splash_text.set_props( self.splash_window, **text_props )
+        self.splash_window.layers.append( self.splash_text )
 
         if progress_bar:
             self.progress_bar = Window.ProgressBar( self.splash_window )

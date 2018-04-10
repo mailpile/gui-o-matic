@@ -98,7 +98,7 @@ script = {
         "close_quits": True,
         "width": 480,
         "height": 360,
-        "image": "{basedir}/img/gt-wallpaper.png",
+        "background": "{basedir}/img/gt-wallpaper.png",
         "action_items": [
             {
                 "id": "btn-xkcd",
@@ -204,6 +204,11 @@ session.command( 'show_main_window', {} )
 session.command( 'set_status', {"status": "attention"} )
 time.sleep( 2 )
 
+
+session.command( 'set_status_display', {"id": "id2",
+                                        "icon":"image:shutdown",
+                                        "title": "Whoops!",
+                                        "details": "Just kidding!" } )
 session.command( 'set_item', {"id": "menu-xkcd", "label": "No really, XKCD"} )
 session.command( 'set_item', {"id": "btn-xkcd", "label": "XKCDonk"} )
 time.sleep( 30 )
