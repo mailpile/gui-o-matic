@@ -20,7 +20,8 @@ import traceback
 import atexit
 import itertools
 import struct
-import threading
+import functools
+import Queue
 
 import pil_bmp_fix
 
@@ -350,8 +351,6 @@ class Window( object ):
             size = ( rect[2] - rect[0], rect[3] - rect[1] )
             combined = self.render( size, color )
             self.image = Image.Bitmap( combined )
-            print "Updated from: {}".format( threading.current_thread() )
-
 
         def dirty( self, window ):
             rect = self.rect or window.get_client_region()
@@ -360,7 +359,6 @@ class Window( object ):
             return result
 
         def invalidate( self ):
-            print "Invalidated from: {}".format( threading.current_thread() )
             self.image = None
             
         def __call__( self, window, hdc, paint_struct ):
@@ -998,7 +996,7 @@ class WinapiGUI(BaseGUI):
         self.ready = False
         self.statuses = {}
         self.items = {}
-
+        
     def layout_displays( self, spacing = 10 ):
         '''
         layout displays top-to-bottom, placing notification text after
@@ -1296,8 +1294,18 @@ class WinapiGUI(BaseGUI):
         # Enter run loop
         #
         self.ready = True
+        if self.proxy:
+            self.proxy.ready = True
         while win32gui.PumpWaitingMessages() == 0:
-            pass
+            if not self.queue:
+                continue
+            
+            while True:
+                try:
+                    msg = self.queue.get_nowait()
+                    msg()
+                except Queue.Empty:
+                    break
         
     def terminal(self, command='/bin/bash', title=None, icon=None):
         print( "FIXME: Terminal not supported!" )
@@ -1472,4 +1480,75 @@ class WinapiGUI(BaseGUI):
 
         print('NOTIFY: %s' % message)
 
-GUI = WinapiGUI
+class AsyncWrapper( object ):
+    '''
+    Creates a factory that produces proxy-object pairs for a given class.
+
+    Motivation: having the control thread call into the GUI whenever is an
+    obvious source of race conditions. We could try to do locking throughout,
+    but it's both easier and more robust to present an actor-style interface
+    to the remote thread. Rather than explicitly re-dispatching each method
+    inside WinapiGUI, we just create a proxy object in tandem with the original
+    object, leaving the original object intact.
+
+    Within the proxy object, we discover and redirect all external methods via
+    an async queue(identified by not starting with '_'). Not the best proxy,
+    but good enough for our purposes. (We could do better by overriding
+    attribute lookup in the proxy instead)
+
+    Finally, we provide a touch-up hook, so that external code can correct/
+    adjust behavior.
+    '''
+
+    def __init__( self, cls, touchup ):
+        '''
+        Create a class-like object that wraps creating the specifed class with
+        an async proxy interface.
+        '''
+        self.cls = cls
+        self.proxy = type( "Proxy_" + cls.__name__, (cls,), {} )
+        self.touchup = touchup
+
+    @staticmethod
+    def wrap( function, queue ):
+        '''
+        Wrap calling functions as async queue messages
+        '''
+        @functools.wraps( function )
+        def post_message( *args, **kwargs ):
+            msg = functools.partial( function, *args, **kwargs )
+            queue.put( msg )
+
+        return post_message
+
+    def __call__( self, *args, **kwargs ):
+        '''
+        Create a new instance of the wrapped class and a proxy for it,
+        returning the proxy.
+        '''
+        target = self.cls( *args, **kwargs )
+        proxy = self.proxy( *args, **kwargs )
+        queue = Queue.Queue()
+
+        for attr in dir( target ):
+            if attr.startswith('_'):
+                continue
+            value = getattr( target, attr )
+            if callable( value ):
+                setattr( proxy, attr, self.wrap(value,queue) )
+
+        self.touchup( target, proxy, queue )
+        return proxy
+
+def touchup_winapi_gui( self, proxy, queue ):
+    '''
+    glue winapi gui to the proxy:
+        - allow WinapiGUI to toggel proxy.ready
+        - specify the async queue
+        - override run to be a direct call
+    '''
+    self.proxy = proxy
+    self.queue = queue
+    proxy.run = self.run
+
+GUI = AsyncWrapper( WinapiGUI, touchup_winapi_gui )

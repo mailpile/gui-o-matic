@@ -29,7 +29,7 @@ class GUIPipeControl(threading.Thread):
     def shell_pivot(self, command):
         self.child = subprocess.Popen(command,
             shell=True,
-            close_fds=True,
+            close_fds= (os.name != 'nt'), # Doesn't work on windows!
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE)
         self.fd = self.child.stdout
@@ -46,7 +46,6 @@ class GUIPipeControl(threading.Thread):
             for count in range(0, 60):
                 try:
                     self.sock = self.listening.accept()[0]
-                    self.fd = self.sock.makefile()
                     return
                 except socket.timeout:
                     if self.child.poll() is not None:
@@ -54,7 +53,10 @@ class GUIPipeControl(threading.Thread):
         else:
             self.listening.settimeout(60)
             self.sock = self.listening.accept()[0]
-            self.fd = self.sock.makefile()
+
+        # https://stackoverflow.com/questions/19570672/non-blocking-error-when-adding-timeout-to-python-server
+        self.sock.setblocking(True)
+        self.fd = self.sock.makefile()
 
     def shell_tcp_pivot(self, command):
         port = self._listen()
@@ -126,7 +128,7 @@ class GUIPipeControl(threading.Thread):
             while True:
                 try:
                     line = self.fd.readline()
-                except IOError:
+                except IOError as e:
                     line = None
 
                 if not line:
@@ -150,4 +152,8 @@ class GUIPipeControl(threading.Thread):
         except:
             traceback.print_exc()
         finally:
+            # Use sys.exit to allow atxit.register() to fire...
+            #
+            self.gui.quit()
+            os.sleep(0.5)
             os._exit(0)
