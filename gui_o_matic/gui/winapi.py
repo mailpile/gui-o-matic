@@ -879,10 +879,13 @@ class Window( object ):
     def _show_menu( self ):
         menu = win32gui.CreatePopupMenu()
         for action in self.menu_actions:
-            flags = win32con.MF_STRING
-            if not action.sensitive:
-                flags |= win32con.MF_GRAYED
-            win32gui.AppendMenu( menu, flags, action.get_id(), action.label )
+            if action:
+                flags = win32con.MF_STRING
+                if not action.sensitive:
+                    flags |= win32con.MF_GRAYED
+                win32gui.AppendMenu( menu, flags, action.get_id(), action.label )
+            else:
+                win32gui.AppendMenu( menu, win32con.MF_SEPARATOR, 0, '' )
         
         pos = win32gui.GetCursorPos()
         
@@ -1012,7 +1015,7 @@ class WinapiGUI(BaseGUI):
         '''
         def button_items():
             button_keys = map( lambda item: item['id'],
-                               self.config['main_window']['actions'] )
+                               self.config['main_window']['action_items'] )
             return map( lambda key: self.items[ key ], button_keys )
         window_size = self.main_window.get_client_region()
 
@@ -1078,14 +1081,21 @@ class WinapiGUI(BaseGUI):
         for each item.
         '''
         # menu items
-        for item in self.config['indicator']['menu']:
-            self.create_action( self.create_menu_control, item )
+        for item in self.config['indicator']['menu_items']:
+            if 'id' in item:
+                self.create_action( self.create_menu_control, item )
 
-        menu_items = [ self.items[ item['id'] ]['action'] for item in self.config['indicator']['menu'] ]
+        menu_items = []
+        for item in self.config['indicator']['menu_items']:
+            if 'id' in item:
+                menu_item = self.items[ item['id'] ]['action']
+            else:
+                menu_item = None #separator
+            menu_items.append( menu_item )
         self.systray_window.set_menu( menu_items )
 
         # actions
-        for item in self.config['main_window']['actions']:
+        for item in self.config['main_window']['action_items']:
             self.create_action( self.create_button_control, item )
 
         self.layout_buttons()
@@ -1136,7 +1146,7 @@ class WinapiGUI(BaseGUI):
 
     class StatusDisplay( object ):
 
-        def __init__( self, id, icon, title, details, gui ):
+        def __init__( self, gui, id, icon, title, details = '' ):
             self.title = Window.TextLayer( text = title,
                                            rect = (0,0,0,0),
                                            font = gui.fonts[ 'title' ] )
@@ -1270,7 +1280,7 @@ class WinapiGUI(BaseGUI):
         print( "FIXME: Terminal not supported!" )
 
     def set_status(self, status='startup', badge = 'ignored'):
-        icon_path = self._resolve_variables( self.config['images'][status] )
+        icon_path = self.get_image_path( self.config['images'][status] )
         small_icon = Image.IconSmall( icon_path )
         large_icon = Image.IconLarge( icon_path )
 
@@ -1327,37 +1337,76 @@ class WinapiGUI(BaseGUI):
         if name.startswith( prefix ):
             key = name[ len( prefix ): ]
             name = self.config['images'][ key ]
-        return self._resolve_variables( name )
+        path = self._resolve_variables( name )
+
+        # attempt symlink
+        with open( path, 'rb' ) as handle:
+            data = handle.read(256)
+
+        try:
+            symlink = data.decode("utf-8")
+            base, ignored = os.path.split( path )
+            update = os.path.join( base, symlink )
+            print "Following symlink {} -> {}".format( path, update )
+            return os.path.abspath( update )
+        except UnicodeDecodeError:
+            return path
 
     def show_splash_screen(self, height=None, width=None,
-                           progress_bar=False, image=None,
+                           progress_bar=False, background=None,
                            message='', message_x=0.5, message_y=0.5):
-        # TODO: Handle height/width as None
+
+        # Reset splash window layers
+        #
+        self.splash_window.layers = []
+
+        if background:
+            image = PIL.Image.open( self.get_image_path( background ) )
+            background = Window.CompositorLayer()
+            background.operations.append( Compositor.Blend( image ) )
+            self.splash_window.layers.append( background )
+
+            if width and height:
+                pass
+            if height and not width:
+                width = height * image.size[0] / image.size[1]
+            elif width and not height:
+                height = width * image.size[1] / image.size[0]
+            else:
+                height = image.size[1]
+                width = image.size[0]
+                
+        if width and height:
+            self.splash_window.set_size( (0, 0, width, height) )
+        else:
+            print( "using default splash size" )
+
+        # TODO: position splash text
+        #
         window_roi = win32gui.GetClientRect( self.splash_window.window_handle )
-        window_size = tuple( window_roi[2:] )
-        
-        #bitmap = Image.Bitmap( self.get_image_path( image ),
-        #                       size = window_size )
-        #background = Window.BitmapLayer( bitmap )
-        
-        image = PIL.Image.open( self.get_image_path( image ) )
-        background = Window.CompositorLayer()
-        background.operations.append( Compositor.Blend( image ) )
-        
+        width = window_roi[2] - window_roi[0]
+        height = window_roi[3] - window_roi[1]
 
-        ''''
-        image = image.convert('RGBA')
-        image = image.resize( window_size, PIL.Image.ANTIALIAS )
-        background = Window.ImageBlendLayer( image )
-        '''
-
-        self.splash_text = Window.TextLayer( message,
-                                             window_roi,
+        self.splash_text = Window.TextLayer( text = message,
+                                             rect = window_roi,
                                              style = win32con.DT_SINGLELINE |
                                                      win32con.DT_CENTER |
                                                      win32con.DT_VCENTER,
                                              font = self.fonts['splash'] )
-        
+
+        text_center = (window_roi[0] + int((window_roi[2] - window_roi[0]) * message_x),
+                       window_roi[1] + int((window_roi[3] - window_roi[1]) * message_y))
+        width_pad = min(window_roi[2] - text_center[0],
+                        text_center[0] - window_roi[0])
+        height_pad = min(window_roi[3] - text_center[1],
+                         text_center[1] - window_roi[1])
+
+        text_roi = (text_center[0] - width_pad,
+                    text_center[1] - height_pad,
+                    text_center[0] + width_pad,
+                    text_center[1] + height_pad)
+
+        self.splash_text.set_props( self.splash_window, rect = text_roi )
         self.splash_window.layers = [ background,
                                       self.splash_text ]
 

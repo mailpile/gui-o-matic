@@ -99,7 +99,7 @@ script = {
         "width": 480,
         "height": 360,
         "image": "{basedir}/img/gt-wallpaper.png",
-        "actions": [
+        "action_items": [
             {
                 "id": "btn-xkcd",
                 "label": "XKCD",
@@ -137,10 +137,12 @@ script = {
         ]
     },
     "indicator": {
-        "menu": [
+        "menu_items": [
             {
                 "label": "Indicator test",
                 "id": "info"
+            },{
+                "separator": True
             },{
                 "label": "XKCD",
                 "id": "menu-xkcd",
@@ -167,7 +169,8 @@ session.send( "OK LISTEN" )
 
 session.command( 'show_splash_screen',
          {
-            "image": "{basedir}/img/gt-splash.png",
+            "background": "{basedir}/img/gt-splash.png",
+            "width": 320,
             "message": "Hello world!",
             "progress_bar": True
          })
