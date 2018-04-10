@@ -1,0 +1,17 @@
+#!/bin/bash
+#
+# This script updates the versions in setup.py and gui_o_matic/__init__.py
+# based on the length of our git commit log.
+#
+MAIN_VERSION=0.1
+
+VERSION=$MAIN_VERSION.$((1 + $(git log --pretty=oneline|wc -l)))
+
+perl -i -npe "s/^VERSION =.*/VERSION = '$VERSION'/m" setup.py
+
+perl -i -npe "s/^__version__ =.*/__version__ = '$VERSION'/m" \
+  gui_o_matic/__init__.py
+
+git add setup.py gui_o_matic/__init__.py
+git commit -m "This is version $VERSION"
+git tag -f v"$VERSION"

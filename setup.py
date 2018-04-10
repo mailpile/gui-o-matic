@@ -1,16 +1,21 @@
-from distribute_setup import use_setuptools
-use_setuptools()
+try:
+    import setuptools
+except ImportError:
+    from distribute_setup import use_setuptools
+    use_setuptools()
 
-from setuptools import setup
+from setuptools import setup, find_packages
 
+# Do not edit: The VERSION gets updated by the update-version script
+VERSION = '0.1.48'
 
 setup(
     name='gui_o_matic',
-    version='0.1',
+    version=VERSION,
     author='Mailpile ehf.',
     author_email='team@mailpile.is',
     url='https://github.com/mailpile/gui-o-matic/',
-    packages=['gui_o_matic'],
+    packages=find_packages(),
     entry_points={
         'console_scripts': [
             'gui-o-matic = gui_o_matic.__main__:main'
