@@ -173,7 +173,7 @@ hints.
             ],
     ...
 
-The main window `actions` are generally implemented as buttons in desktop
+The main window `action_items` are generally implemented as buttons in desktop
 environments. Actions are to be allocated space in the GUI, in the order they
 are specified - if we run out of space, latter actions may be moved to some
 sort of overflow or "hamburger".
@@ -193,7 +193,7 @@ which case "args" should be a dictionary of arguments, or it can be one of:
 clarifications on these ops and their arguments.
 
     ...
-            "actions": [
+            "action_items": [
                 {
                     "id": "open",
                     "type": "button",  # button is the default
@@ -408,6 +408,8 @@ Arguments:
 
    * background: (string) absolute path to a background image file
    * message: (string) initial status message
+   * message_x: (float [0-1]) positioning hint for message in window
+   * message_y: (float [0-1]) positioning hint for message in window
    * progress_bar: (bool) display a progress bar?
 
 This displays a splash-screen, to keep the user happy while something
@@ -529,7 +531,7 @@ the user's attention to the app.
 
 If present, `actions` should be a list of dictionaries containing the same
 `label`, `op`, `args` and `position` arguments as are used in the main
-window actions.
+window `action_items` section.
 
 Since support for notification actions varies a great deal from platform to
 platform (and toolkit to toolkit), the caller must assume some or all items
