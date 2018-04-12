@@ -132,7 +132,7 @@ script = {
                 "id": "id2",
                 "icon": "image:attention",
                 "title": "Launching Frobnicator",
-                "details": "The beginning and end of all things"
+                "details": "The beginning and end of all things...\n...or is it?"
             }
         ]
     },

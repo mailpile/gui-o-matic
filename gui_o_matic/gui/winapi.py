@@ -102,7 +102,6 @@ class Image( object ):
         brush = win32gui.CreateSolidBrush( struct.unpack( "@i", pixel )[ 0 ] )
         win32gui.FillRect( hdc_mem, ( 0, 0, source.width, source.height ), brush )
 
-        print "done!"
 
         win32gui.SelectObject( hdc_mem, prior )
         win32gui.DeleteDC( hdc_mem )
@@ -534,6 +533,9 @@ class Window( object ):
             self.height = None
             self.roi = None
 
+        def _set_text( self, text ):
+            self.text = re.sub( "(\r\n|\n|\r)", "\r\n", text, re.M )
+
         def set_props( self, window = None, **kwargs ):
 
             if window and self.roi:
@@ -542,7 +544,11 @@ class Window( object ):
 
             for key in ('text','rect','style','font'):
                 if key in kwargs:
-                    setattr( self, key, kwargs[ key ] )
+                    setter = '_set_' + key
+                    if hasattr( self, setter ):
+                        getattr( self, setter )( kwargs[ key ] )
+                    else:
+                        setattr( self, key, kwargs[ key ] )
                     
             if window:
                 hdc = win32gui.GetWindowDC( window.window_handle )
@@ -846,7 +852,7 @@ class Window( object ):
                     baloon,
                     int(timeout * 1000),
                     title)
-            print data
+            
             win32gui.Shell_NotifyIcon( message, data )
         else:
             print "Can't send popup without systray!"
@@ -879,7 +885,6 @@ class Window( object ):
 
     def _on_command( self, window_handle, message, wparam, lparam ):
         target_id = win32gui.LOWORD(wparam)
-        print( "command {}".format( target_id ) )
         target = Registry.lookup( target_id )
         target( self, message, wparam, lparam )
         return 0
@@ -1012,8 +1017,12 @@ class WinapiGUI(BaseGUI):
             return map( lambda item: item['id'], items )
 
         for key in display_keys():
-            display = self.displays[ key ]
+            display = self.displays[ key ]            
+            detail_text = display.details.text
+            detail_lines = max( detail_text.count( '\n' ), 3 )
+            display.details.set_props( text = '\n' * detail_lines )
             rect = display.layout( hdc, rect, spacing )
+            display.details.set_props( text = detail_text )
             rect = (rect[0],
                     rect[1] + spacing,
                     rect[2],
@@ -1061,7 +1070,7 @@ class WinapiGUI(BaseGUI):
                     y_offset - height,
                     width,
                     height)
-            #print rect
+            
             button.set_size( rect )
             x_offset += width + spacing
 
@@ -1141,16 +1150,16 @@ class WinapiGUI(BaseGUI):
         '''
         self.known_fonts = {}
         def handle_font( font_config, text_metric, font_type, param ):
-            print font_config.lfFaceName
+            #print font_config.lfFaceName
             self.known_fonts[ font_config.lfFaceName ] = font_config
             return True
 
         hdc = win32gui.GetWindowDC( self.main_window.window_handle )
-        print "=== begin availalbe fonts ==="
+        #print "=== begin availalbe fonts ==="
         win32gui.EnumFontFamilies( hdc, None, handle_font, None )
-        print "=== end available fonts ==="
+        #print "=== end available fonts ==="
         self.default_font = win32gui.GetTextFace( hdc )
-        print "Default font: " + self.default_font
+        #print "Default font: " + self.default_font
         
         win32gui.ReleaseDC( self.main_window.window_handle, hdc )
         keys = ( 'title', 'details', 'notification', 'splash' )
@@ -1165,6 +1174,7 @@ class WinapiGUI(BaseGUI):
                                            font = gui.fonts[ 'title' ] )
             self.details = Window.TextLayer( text = details,
                                              rect = (0,0,0,0),
+                                             style = win32con.DT_WORDBREAK,
                                              font = gui.fonts[ 'details' ] )
             self.icon = Compositor.Blend( PIL.Image.open( gui.get_image_path( icon ) ) )
 
@@ -1191,6 +1201,7 @@ class WinapiGUI(BaseGUI):
                          title_roi[3])
 
             self.title.rect = title_roi
+            print "details: {}, '{}'".format( details_roi, self.details.text )
 
             details_rect = (rect[0] + text_height + spacing,
                             details_roi[1],
@@ -1348,7 +1359,7 @@ class WinapiGUI(BaseGUI):
             display.details.set_props( self.main_window, text = details )
             
         if icon is not None:
-            display.icon.image = PIL.Image.open( self.get_image_path( icon ) )
+            display.icon.source = PIL.Image.open( self.get_image_path( icon ) )
             self.compositor.invalidate()
             win32gui.InvalidateRect( self.main_window.window_handle,
                                      display.rect,

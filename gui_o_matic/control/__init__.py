@@ -46,7 +46,7 @@ class GUIPipeControl(threading.Thread):
             for count in range(0, 60):
                 try:
                     self.sock = self.listening.accept()[0]
-                    return
+                    break
                 except socket.timeout:
                     if self.child.poll() is not None:
                         raise
