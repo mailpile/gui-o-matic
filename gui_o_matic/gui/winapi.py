@@ -626,6 +626,9 @@ class Window( object ):
         self.layers = []
         self.module_handle = win32gui.GetModuleHandle(None)
         self.systray = False
+        self.systray_map = {
+            win32con.WM_RBUTTONDOWN: self._show_menu
+            }
         
         # Setup window class
         #
@@ -729,6 +732,9 @@ class Window( object ):
         else:
             print "Can't send popup without systray!"
 
+    def set_systray_actions( self, actions ):
+        self.systray_map.update( actions )
+
     def set_systray( self, small_icon = None, text = '' ):
         if small_icon:
             self.small_icon = small_icon
@@ -762,8 +768,10 @@ class Window( object ):
         return 0
 
     def _on_notify( self, window_handle, message, wparam, lparam  ):
-        if lparam == win32con.WM_RBUTTONDOWN:
-            self._show_menu()
+        try:
+            self.systray_map[ lparam ]()
+        except KeyError:
+            pass
         return True
 
     def _show_menu( self ):
@@ -892,7 +900,7 @@ class WinapiGUI(BaseGUI):
             display = self.displays[ key ]            
             detail_text = display.details.text
             detail_lines = max( detail_text.count( '\n' ), 2 ) 
-            display.details.set_props( text = 'padding\n' * detail_lines  )
+            display.details.set_props( text = 'placeholder\n' * detail_lines  )
             rect = display.layout( hdc, rect, spacing )
             display.details.set_props( text = detail_text )
             rect = (rect[0],
@@ -1073,9 +1081,7 @@ class WinapiGUI(BaseGUI):
                          title_roi[3])
 
             self.title.rect = title_roi
-            print "details: {}, '{}'".format( details_roi,
-                                              self.details.text.replace( '\r\n', '\\r\\n' ) )
-
+           
             details_rect = (rect[0] + text_height + spacing,
                             details_roi[1],
                             rect[2],
@@ -1114,14 +1120,28 @@ class WinapiGUI(BaseGUI):
         self.systray_window = Window(title = self.config['app_name'],
                                      style = Window.systray_style)
 
-       
+
+        def show_main_window():
+            win32gui.ShowWindow( self.main_window.window_handle,
+                                 win32con.SW_SHOWNORMAL )
+            win32gui.SetForegroundWindow( self.main_window.window_handle )
+
+        def minimize_main_window(*ignored ):
+            win32gui.ShowWindow( self.main_window.window_handle,
+                                 win32con.SW_SHOWMINIMIZED )
+            return True
+
+        self.systray_window.set_systray_actions({
+            win32con.WM_LBUTTONDBLCLK: show_main_window
+            })
 
         window_size = ( self.config['main_window']['width'],
                         self.config['main_window']['height'] )
         
         self.main_window = Window(title = self.config['app_name'],
                                   style = Window.main_window_style,
-                                  size = window_size )
+                                  size = window_size,
+                                  messages = { win32con.WM_CLOSE: minimize_main_window })
 
         self.compositor = Window.CompositorLayer()
         self.main_window.layers.append( self.compositor )
@@ -1359,7 +1379,7 @@ class WinapiGUI(BaseGUI):
         else:
             #if self.main_window.get_visibility():
             self.notification_text.set_props( self.main_window,
-                                                  text = message )
+                                              text = message )
 
             #if self.splash_window.get_visibility():
             self.splash_text.set_props( self.splash_window,
