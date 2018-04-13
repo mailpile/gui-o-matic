@@ -155,5 +155,5 @@ class GUIPipeControl(threading.Thread):
             # Use sys.exit to allow atxit.register() to fire...
             #
             self.gui.quit()
-            os.sleep(0.5)
+            time.sleep(0.5)
             os._exit(0)

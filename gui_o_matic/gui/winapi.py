@@ -69,46 +69,6 @@ class Image( object ):
         size = tuple(map(win32api.GetSystemMetrics,dims))
         return cls.Icon( *args, size = size, **kwargs )
 
-    @staticmethod
-    def _winapi_bitmap( source ):
-        '''
-        try to create a bitmap in memory
-
-        NOTE: Doesn't work! FillRect always paints with background!
-        '''
-        assert( source.mode == 'RGBA' )
-        bitmap = win32gui.CreateBitmap( source.width,
-                                      source.height,
-                                      1,
-                                      32,
-                                      None )
-        hdc = win32gui.GetDC( None )
-        hdc_mem = win32gui.CreateCompatibleDC( hdc )
-        prior = win32gui.SelectObject( hdc_mem, bitmap )
-
-        pixels = source.load()
-
-        '''
-        for x in range( source.width ):
-            for y in range( source.height ):
-                pixel = struct.pack( '@BBBB', *pixels[ x, y ] )
-                #pixel = struct.pack('@BBBB', 0, 0, 0, 0 )
-                color = struct.unpack("@i", pixel )[ 0 ]
-                print "{} {} {}".format( x, y, color )
-                brush = win32gui.CreateSolidBrush( color )
-                win32gui.FillRect( hdc_mem, ( x, y, 1, 1 ), brush )
-        '''
-        pixel = struct.pack('@BBBB', 0, 255, 255, 0  )
-        brush = win32gui.CreateSolidBrush( struct.unpack( "@i", pixel )[ 0 ] )
-        win32gui.FillRect( hdc_mem, ( 0, 0, source.width, source.height ), brush )
-
-
-        win32gui.SelectObject( hdc_mem, prior )
-        win32gui.DeleteDC( hdc_mem )
-        win32gui.ReleaseDC( None, hdc )
-        
-        return bitmap
-
     def __init__( self, path, mode, size = None, debug = None ):
         '''
         Load the image into memory, with appropriate conversions.
@@ -137,10 +97,6 @@ class Image( object ):
 
         if debug:
             source.save( debug, mode[ 1 ] )
-
-        #if mode[ 0 ] == win32con.IMAGE_BITMAP:
-        #    self.handle = self._winapi_bitmap( source )
-        #    return
         
         with tempfile.NamedTemporaryFile( delete = False ) as handle:
             filename = handle.name
@@ -325,6 +281,9 @@ class Window( object ):
             raise NotImplementedError
 
     class CompositorLayer( Layer, Compositor ):
+        '''
+        Layer that moves compositor output into an HDC, caching rendering.
+        '''
 
         def __init__( self, rect = None, background = None ):
             super(Window.CompositorLayer, self).__init__()
@@ -382,91 +341,6 @@ class Window( object ):
 
             win32gui.SelectObject( hdc_mem, prior_bitmap )
             win32gui.DeleteDC( hdc_mem )
-        
-
-    class ImageBlendLayer( Layer ):
-        '''
-        Manually blends an image with the window, pixel by pixel, using alpha.
-        Pros:
-          - Works.
-        Cons:
-          - Slow!
-        TODO:
-          - Check out rendering everything in PIL, then shipping to winapi as RGB.
-              - win32gui.LoadImage() won't open RGBA, alpha is primarily GDI+.
-              - Could optionally grab prior window contents.
-          - Maybe modidy win32gui.CreateBitmap() to accept an initial byte sequence?
-        Wanted:
-          - Limit blending to ROI.
-          - Handle interrupted rendering better.
-          - Handle sizing/stretching better.
-        '''
-
-        def __init__( self, image, src_offset = (0,0), dst_offset = (0,0), size = None ):
-            super(Window.ImageBlendLayer, self).__init__()
-            self.image = image
-            self.src_offset = src_offset 
-            self.dst_offset = dst_offset
-            self.size = size or image.size
-            self.pixels = image.load()
-
-        def _baseline_benchmark( self, window, hdc, paint_struct ):
-            '''
-            Test pixel access performance without blending.
-            Result: About the same as blending.
-            '''
-            for x in range(self.size[0]):
-                for y in range(self.size[1]):
-                    dst_x = x + self.dst_offset[0]
-                    dst_y = y + self.dst_offset[1]
-                    packed = win32gui.GetPixel( hdc, dst_x, dst_y )
-                    win32gui.SetPixel( hdc, dst_x, dst_y, 0 )
-
-        def __call__( self, window, hdc, paint_struct ):
-            '''
-            Blend image per pixel. Inlined everything in integer math
-            to reduce python overhead, almost as fast as baseline
-            benchmark.
-            '''
-            # Clip to draw ROI
-            roi = paint_struct[ 2 ]
-            target = (self.dst_offset[ 0 ],
-                      self.dst_offset[ 1 ],
-                      self.dst_offset[ 0 ] + self.size[ 0 ],
-                      self.dst_offset[ 1 ] + self.size[ 1 ])
-            overlap = rect_intersect( roi, target )
-
-            x_range = (overlap[ 0 ] - self.dst_offset[ 0 ],
-                       overlap[ 2 ] - self.dst_offset[ 0 ])
-
-            y_range = (overlap[ 1 ] - self.dst_offset[ 1 ],
-                       overlap[ 3 ] - self.dst_offset[ 1 ])
-
-            # Blend inside ROI
-            try:
-                for y in range(*y_range):
-                    for x in range(*x_range):
-                        dst_x = x + self.dst_offset[0]
-                        dst_y = y + self.dst_offset[1]
-                        src_x = x + self.src_offset[0]
-                        src_y = y + self.src_offset[1]
-                        original = win32gui.GetPixel( hdc, dst_x, dst_y )
-                        src_r = (original >> 0) & 255
-                        src_g = (original >> 8) & 255
-                        src_b = (original >> 16) & 255
-                        mix_r, mix_g, mix_b, alpha = self.pixels[ src_x, src_y ]
-                        complement = 255 - alpha
-                        dst_r = (src_r * complement + mix_r * alpha) / 255
-                        dst_g = (src_g * complement + mix_g * alpha) / 255
-                        dst_b = (src_b * complement + mix_b * alpha) / 255
-                        result = (dst_b << 16) | (dst_g << 8) | (dst_r << 0)
-                        win32gui.SetPixel( hdc, dst_x, dst_y, result )
-
-            # If part of the window becomes occluded during drawing, an
-            # exception is thrown.
-            #
-            except Exception as e:
-                traceback.print_exc()    
 
     class BitmapLayer( Layer ):
         '''
@@ -501,19 +375,6 @@ class Window( object ):
                                  src_roi[ 2 ] - src_roi[ 0 ],
                                  src_roi[ 3 ] - src_roi[ 1 ],
                                  blend )
-            '''
-            # Blit without alpha channel blending
-            win32gui.StretchBlt( hdc,
-                                 dst_roi[ 0 ],
-                                 dst_roi[ 1 ],
-                                 dst_roi[ 2 ],
-                                 dst_roi[ 3 ],
-                                 hdc_mem,
-                                 src_roi[ 0 ],
-                                 src_roi[ 1 ],
-                                 src_roi[ 2 ],
-                                 src_roi[ 3 ],
-                                 win32con.SRCCOPY )'''
             
             win32gui.SelectObject( hdc_mem, prior )
             win32gui.DeleteDC( hdc_mem )
@@ -524,7 +385,7 @@ class Window( object ):
         Stub text layer, need to add font handling.
         '''
 
-        def __init__( self, text, rect, style = win32con.DT_SINGLELINE, font = None ):
+        def __init__( self, text, rect, style = win32con.DT_WORDBREAK, font = None ):
             assert( isinstance( style, int ) )
             self.text = text
             self.rect = rect
@@ -579,8 +440,17 @@ class Window( object ):
             #                                  self.style | win32con.DT_CALCRECT )
             #self.width = roi[2] - roi[0]
             #print "roi {}".format( (self.width, self.height) )
-                
-            (self.width, self.height) = win32gui.GetTextExtentPoint32( hdc, self.text )
+
+            # FIXME: manually line wrap:(
+            #
+            if self.style & win32con.DT_SINGLELINE:
+                (self.width,self.height) = win32gui.GetTextExtentPoint32( hdc, self.text )
+            else:
+                (self.width, self.height) = (0,0)
+                for line in self.text.split( '\r\n' ):
+                    (width,height) = win32gui.GetTextExtentPoint32( hdc, line )
+                    self.height += height
+                    self.width = max( self.width, width )
 
             if self.font:
                 win32gui.SelectObject( hdc, original_font )
@@ -796,6 +666,8 @@ class Window( object ):
         win32gui.ShowWindow( self.window_handle, state )
         win32gui.UpdateWindow( self.window_handle )
 
+    def get_visibility( self ):
+        return win32gui.IsWindowVisible( self.window_handle )
 
     def get_size( self ):
         return win32gui.GetWindowRect( self.window_handle )
@@ -1019,8 +891,8 @@ class WinapiGUI(BaseGUI):
         for key in display_keys():
             display = self.displays[ key ]            
             detail_text = display.details.text
-            detail_lines = max( detail_text.count( '\n' ), 3 )
-            display.details.set_props( text = '\n' * detail_lines )
+            detail_lines = max( detail_text.count( '\n' ), 2 ) 
+            display.details.set_props( text = 'padding\n' * detail_lines  )
             rect = display.layout( hdc, rect, spacing )
             display.details.set_props( text = detail_text )
             rect = (rect[0],
@@ -1171,10 +1043,10 @@ class WinapiGUI(BaseGUI):
         def __init__( self, gui, id, icon, title = ' ', details = ' ' ):
             self.title = Window.TextLayer( text = title,
                                            rect = (0,0,0,0),
+                                           style = win32con.DT_SINGLELINE,
                                            font = gui.fonts[ 'title' ] )
             self.details = Window.TextLayer( text = details,
                                              rect = (0,0,0,0),
-                                             style = win32con.DT_WORDBREAK,
                                              font = gui.fonts[ 'details' ] )
             self.icon = Compositor.Blend( PIL.Image.open( gui.get_image_path( icon ) ) )
 
@@ -1201,7 +1073,8 @@ class WinapiGUI(BaseGUI):
                          title_roi[3])
 
             self.title.rect = title_roi
-            print "details: {}, '{}'".format( details_roi, self.details.text )
+            print "details: {}, '{}'".format( details_roi,
+                                              self.details.text.replace( '\r\n', '\\r\\n' ) )
 
             details_rect = (rect[0] + text_height + spacing,
                             details_roi[1],
@@ -1265,7 +1138,7 @@ class WinapiGUI(BaseGUI):
         except KeyError:
             pass
 
-        self.notification_text = Window.TextLayer( text = '',
+        self.notification_text = Window.TextLayer( text = self.config['main_window'].get( 'initial_notification', ' ' ),
                                             rect = self.main_window.get_client_region(),
                                             font = self.fonts['notification'])
 
@@ -1278,7 +1151,10 @@ class WinapiGUI(BaseGUI):
         self.splash_window = Window(title = self.config['app_name'],
                                     style = Window.splash_screen_style,
                                     size = window_size )
-        
+
+        # DT_VCENTER only works with DT_SINGLINE, linewrap needs
+        # manual positioning logic.
+        #
         self.splash_text = Window.TextLayer( text = '',
                                              rect = (0,0,0,0),
                                              style = win32con.DT_SINGLELINE |
@@ -1331,8 +1207,6 @@ class WinapiGUI(BaseGUI):
 
         systray_hover_text = self.config['app_name'] + ": " + status
         self.systray_window.set_systray( small_icon, systray_hover_text )
-
-        print('STATUS: %s' % status)
 
     def quit(self):
         win32gui.PostQuitMessage(0)     
@@ -1482,14 +1356,14 @@ class WinapiGUI(BaseGUI):
         if popup:
             self.systray_window.show_toast( self.config[ 'app_name' ],
                                             message, 60 )
-            
-        self.notification_text.set_props( self.main_window,
-                                          text = message )
-        
-        self.splash_text.set_props( self.splash_window,
-                                    text = message )
+        else:
+            #if self.main_window.get_visibility():
+            self.notification_text.set_props( self.main_window,
+                                                  text = message )
 
-        print('NOTIFY: %s' % message)
+            #if self.splash_window.get_visibility():
+            self.splash_text.set_props( self.splash_window,
+                                            text = message )
 
 class AsyncWrapper( object ):
     '''
