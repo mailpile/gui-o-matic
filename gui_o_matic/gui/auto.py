@@ -1,49 +1,42 @@
 import copy
+import importlib
+
+# Note--only dict because of gtk gui
+#
+_registry = {
+    'winapi':   'winapi',
+    'macosx':   'macosx',
+    'gtk':      'gtkbase', # The only non-identity mapping...
+    'unity':    'unity',
+}
+
+
+def known_guis():
+    '''
+    List known guis.
+    '''
+    return _registry.keys()
+
+def gui_libname( gui ):
+    '''
+    Convert a gui-name to a libname, assume well-formed if not in registry
+    '''
+    try:
+        return 'gui_o_matic.gui.{}'.format( _registry[ gui ] )
+    except KeyError:
+        return gui
 
 
 def AutoGUI(config, *args, **kwargs):
     """
     Load and instanciate the best GUI available for this machine.
     """
-
-    required = config.get('_require_gui')
-    preferred = [pref.strip().lower() for pref in
-                 (required or config.get('_prefer_gui', []))
-                 if pref]
-
-    if not preferred or 'winapi' in preferred:
+    for candidate in config.get( '_prefer_gui', known_guis() ):
         try:
-            from gui_o_matic.gui.winapi import GUI
-            return GUI(config, *args, **kwargs)
+            impl = importlib.import_module( gui_libname( candidate ) )
+            return impl.GUI( config, *args, **kwargs )
         except ImportError:
             pass
-
-    if not preferred or 'macosx' in preferred:
-        try:
-            from gui_o_matic.gui.macosx import GUI
-            return GUI(config, *args, **kwargs)
-        except ImportError:
-            pass
-
-    if not preferred or 'unity' in preferred:
-        try:
-            from gui_o_matic.gui.unity import GUI
-            return GUI(config, *args, **kwargs)
-        except ImportError:
-            pass
-
-    if not preferred or 'gtk' in preferred:
-        try:
-            from gui_o_matic.gui.gtkbase import GUI
-            return GUI(config, *args, **kwargs)
-        except ImportError:
-            pass
-
-    if preferred and not required:
-        config = copy.copy(config)
-        for kw in ('prefer_gui', 'require_gui'):
-            if kw in config:
-                del config[kw]
-        return AutoGUI(config, *args, **kwargs)
 
     raise NotImplementedError("No working GUI found!")
+

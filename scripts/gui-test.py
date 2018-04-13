@@ -73,7 +73,7 @@ class TestSession( object ):
 script = {
     "app_name": "Indicator Test",
     "app_icon": "{basedir}/img/gt-normal-%(theme)s.png",
-    "_prefer_gui": ["unity", "macosx", "winapi"],
+    "_prefer_gui": ["unity", "macosx", "winapi", "gtk"],
     "images": {
         "startup": "{basedir}/img/gt-startup-%(theme)s.png",
         "normal": "{basedir}/img/gt-normal-%(theme)s.png",
