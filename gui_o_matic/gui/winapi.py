@@ -808,10 +808,15 @@ class Window( object ):
         self.set_visibility( False )
         return 0
 
-    def __del__( self ):
+    def destroy( self ):
         self.set_systray( None, None )
         win32gui.DestroyWindow( self.window_handle )
-        win32gui.UnregisterClass( self.window_class_name, self.window_class )
+        win32gui.UnregisterClass( self.window_class_name, self.module_handle )
+        self.window_handle = None
+
+    def __del__( self ):
+        # check that window was destroyed
+        assert( self.window_handle == None )
 
     def close( self ):
         self.onClose()
@@ -960,7 +965,7 @@ class WinapiGUI(BaseGUI):
             win32gui.InvalidateRect( button.handle, None, False )
 
     def create_action( self, control_factory, item ):
-        action = Action( self,
+        action = Action( self.proxy or self,
                          identifier = item['id'],
                          label = item['label'],
                          operation = item.get('op'),
@@ -1203,16 +1208,28 @@ class WinapiGUI(BaseGUI):
         self.ready = True
         if self.proxy:
             self.proxy.ready = True
-        while win32gui.PumpWaitingMessages() == 0:
-            if not self.queue:
-                continue
-            
-            while True:
-                try:
-                    msg = self.queue.get_nowait()
-                    msg()
-                except Queue.Empty:
-                    break
+
+        # Gotta clean up window handles on exit for windows 10, regardless of
+        # exit reason
+        #
+        try:
+            while win32gui.PumpWaitingMessages() == 0:
+                if not self.queue:
+                    continue
+                
+                while True:
+                    try:
+                        msg = self.queue.get_nowait()
+                        msg()
+                    except Queue.Empty:
+                        break
+                    
+        finally:
+            # Windows 10's CRT crashes if we leave windows open
+            #
+            self.main_window.destroy()
+            self.splash_window.destroy()
+            self.systray_window.destroy()
         
     def terminal(self, command='/bin/bash', title=None, icon=None):
         print( "FIXME: Terminal not supported!" )
