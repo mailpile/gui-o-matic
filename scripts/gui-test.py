@@ -208,9 +208,19 @@ time.sleep( 2 )
 session.command( 'set_status_display', {"id": "id2",
                                         "icon":"image:shutdown",
                                         "title": "Whoops!",
-                                        "details": "Just kidding!" } )
+                                        "details": "Just kidding!",
+                                        "color": "#f00"} )
+
+session.command( 'set_status_display', {"id": "id2",
+                                        "icon":"image:shutdown",
+                                        "title": "Whoops!",
+                                        "details": "Just kidding!",
+                                        "color": "#0088FF"} )
+
 session.command( 'set_item', {"id": "menu-xkcd", "label": "No really, XKCD"} )
 session.command( 'set_item', {"id": "btn-xkcd", "label": "XKCDonk"} )
+
+session.command( 'notify_user', {"message": "This is an overly long notification. It should get truncated somehow to print well"} )
 time.sleep( 30 )
 
 session.command( 'set_status', {"status": "shutdown"} )

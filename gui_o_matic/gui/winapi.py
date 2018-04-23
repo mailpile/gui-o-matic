@@ -6,6 +6,7 @@ import win32con
 import win32gui
 import win32gui_struct
 import win32ui
+import win32print
 import commctrl
 import ctypes
 
@@ -385,12 +386,16 @@ class Window( object ):
         Stub text layer, need to add font handling.
         '''
 
-        def __init__( self, text, rect, style = win32con.DT_WORDBREAK, font = None ):
+        def __init__( self, text, rect, style = win32con.DT_WORDBREAK,
+                      font = None,
+                      color = None ):
             assert( isinstance( style, int ) )
             self.text = text
             self.rect = rect
             self.style = style
             self.font = font
+            self.color = color
+            self.bk_mode = win32con.TRANSPARENT
             self.height = None
             self.roi = None
 
@@ -403,7 +408,7 @@ class Window( object ):
                 win32gui.InvalidateRect( window.window_handle,
                                          self.roi, True )
 
-            for key in ('text','rect','style','font'):
+            for key in ('text','rect','style','font','color'):
                 if key in kwargs:
                     setter = '_set_' + key
                     if hasattr( self, setter ):
@@ -502,13 +507,21 @@ class Window( object ):
             self.roi = (x_min, y_min, x_max, y_max)
             return self.roi
 
+        __mode_setters = {
+            'font': win32gui.SelectObject,
+            'color': win32gui.SetTextColor,
+            'bk_mode': win32gui.SetBkMode
+        }
+
         def __call__( self, window, hdc, paint_struct ):
-            if self.font:
-                prior_font = win32gui.SelectObject( hdc, self.font )
+
+            prior = {}
+            for key, setter in self.__mode_setters.items():
+                value = getattr( self, key )
+                if value is not None:
+                    prior[ key ] = setter( hdc, getattr( self, key ) )
 
             self.calc_roi( hdc )
-
-            prior_bk_mode = win32gui.SetBkMode( hdc, win32con.TRANSPARENT )
             
             win32gui.DrawText( hdc,
                                self.text,
@@ -516,10 +529,9 @@ class Window( object ):
                                self.rect,
                                self.style )
 
-            win32gui.SetBkMode( hdc, prior_bk_mode )
-
-            if self.font:
-                win32gui.SelectObject( hdc, prior_font )
+            for key, value in prior.items():
+                self.__mode_setters[ key ]( hdc, value )
+                
 
     class Control( Registry.AutoRegister ):
         '''
@@ -552,6 +564,9 @@ class Window( object ):
             win32gui.EnableWindow( self.handle, action.sensitive )
             win32gui.SetWindowText( self.handle, action.label )
             self.action = action
+
+        def set_font( self, font ):
+            win32gui.SendMessage( self.handle, win32con.WM_SETFONT, font, True )
 
     class Button( Control ):
 
@@ -887,36 +902,58 @@ class WinapiGUI(BaseGUI):
         self.statuses = {}
         self.items = {}
         
-    def layout_displays( self, spacing = 10 ):
+    def layout_displays( self, padding = 10 ):
         '''
         layout displays top-to-bottom, placing notification text after
+
+        TODO: use 2 passes to split v-spacing
         '''
-        rect = self.main_window.get_client_region()
-        rect = (rect[0] + spacing,
-                rect[1] + spacing,
-                rect[2] - 2 * spacing,
-                rect[3] - 2 * spacing)
+        region = self.main_window.get_client_region()
+        region = (region[0] + padding,
+                  region[1] + padding,
+                  region[2] - 2 * padding,
+                  min(region[3] - 2 * padding, self.button_region[1]))
+        
         hdc = win32gui.GetWindowDC( self.main_window.window_handle )
         def display_keys():
             items = self.config['main_window']['status_displays']
             return map( lambda item: item['id'], items )
 
+        rect = region
+        
         for key in display_keys():
-            display = self.displays[ key ]            
+            display = self.displays[ key ]
+            
             detail_text = display.details.text
             detail_lines = max( detail_text.count( '\n' ), 2 ) 
             display.details.set_props( text = 'placeholder\n' * detail_lines  )
-            rect = display.layout( hdc, rect, spacing )
+            rect = display.layout( hdc, rect, padding )
             display.details.set_props( text = detail_text )
+
+        if len( self.displays ) > 1:
+            v_spacing = min( (rect[3] - rect[1]) / (len( self.displays ) -1), padding * 2 )
+        else:
+            v_spacing = 0
+        rect = region
+
+        for key in display_keys():
+            display = self.displays[ key ]
+            
+            detail_text = display.details.text
+            detail_lines = max( detail_text.count( '\n' ), 2 ) 
+            display.details.set_props( text = 'placeholder\n' * detail_lines  )
+            rect = display.layout( hdc, rect, padding )
+            display.details.set_props( text = detail_text )
+            
             rect = (rect[0],
-                    rect[1] + spacing,
+                    rect[1] + v_spacing,
                     rect[2],
                     rect[3])
 
-        self.notification_text.rect = rect
+        #self.notification_text.rect = rect
         win32gui.ReleaseDC( self.main_window.window_handle, hdc )
 
-    def layout_buttons( self ):
+    def layout_buttons( self, padding = 10, spacing = 10 ):
         '''
         layout buttons, assuming the config declaration is in order.
         '''
@@ -927,12 +964,12 @@ class WinapiGUI(BaseGUI):
         window_size = self.main_window.get_client_region()
 
         # Layout left to right across the bottom
-        spacing = 10
         min_width = 20
         min_height = 20
         x_offset = window_size[0] + spacing
         y_offset = window_size[3] - window_size[1] - spacing
-        x_limit = window_size[2]
+        x_limit = window_size[2],
+        y_min = y_offset
 
         for index, item in enumerate( button_items() ):
             action = item[ 'action' ]
@@ -942,14 +979,15 @@ class WinapiGUI(BaseGUI):
             width, height = win32gui.GetTextExtentPoint32( hdc, action.label )
             win32gui.ReleaseDC( None, hdc )
             
-            
-            width = max( width + spacing , min_width )
-            height = max( height + spacing, min_height )
+            width = max( width + padding , min_width )
+            height = max( height + padding, min_height )
 
             # create new row if wrapping needed(not well tested)
             if x_offset + width > x_limit:
                 x_offset = window_size[0] + spacing
                 y_offset -= spacing + height
+
+            y_min = min( y_min, y_offset - height )
 
             rect = (x_offset,
                     y_offset - height,
@@ -958,6 +996,18 @@ class WinapiGUI(BaseGUI):
             
             button.set_size( rect )
             x_offset += width + spacing
+
+        self.button_region = (window_size[0] + spacing,
+                              y_min,
+                              window_size[2] - spacing * 2,
+                              window_size[3] - window_size[ 1 ] - spacing)
+        
+        notification_rect = (x_offset,
+                             y_min,
+                             window_size[2] - spacing * 2,
+                             y_offset)
+
+        self.notification_text.set_props( self.main_window, rect = notification_rect )
 
         # Force buttons to refresh overlapped regions
         for item in button_items():
@@ -979,6 +1029,7 @@ class WinapiGUI(BaseGUI):
 
     def create_button_control( self, action ):
         control = Window.Button( self.main_window, (10,10,100,30), action )
+        control.set_font( self.button_font )
         return control
 
     def create_controls( self ):
@@ -1007,19 +1058,20 @@ class WinapiGUI(BaseGUI):
 
         self.layout_buttons()
 
-    def create_font( self, points = 0, family = None, bold = False, italic = False ):
+    def create_font( self, hdc, points = 0, family = None, bold = False, italic = False ):
         '''
         Create font objects for configured fonts
         '''
         font_config = win32gui.LOGFONT()
-        font_config.lfHeight = points
+        #https://support.microsoft.com/en-us/help/74299/info-calculating-the-logical-height-and-point-size-of-a-font
+        font_config.lfHeight = -int((points * win32print.GetDeviceCaps(hdc, win32con.LOGPIXELSY))/72)
         font_config.lfWidth = 0
         font_config.lfWeight = win32con.FW_BOLD if bold else win32con.FW_NORMAL
         font_config.lfItalic = italic
         font_config.lfCharSet = win32con.DEFAULT_CHARSET
-        font_config.lfOutPrecision = win32con.OUT_DEFAULT_PRECIS
+        font_config.lfOutPrecision = win32con.OUT_TT_PRECIS
         font_config.lfClipPrecision = win32con.CLIP_DEFAULT_PRECIS
-        font_config.lfQuality = win32con.ANTIALIASED_QUALITY
+        font_config.lfQuality = win32con.CLEARTYPE_QUALITY
         font_config.lfPitchAndFamily = win32con.DEFAULT_PITCH | win32con.FF_DONTCARE
 
         if family and family not in self.known_fonts:
@@ -1040,16 +1092,23 @@ class WinapiGUI(BaseGUI):
             return True
 
         hdc = win32gui.GetWindowDC( self.main_window.window_handle )
+        
         #print "=== begin availalbe fonts ==="
         win32gui.EnumFontFamilies( hdc, None, handle_font, None )
         #print "=== end available fonts ==="
-        self.default_font = win32gui.GetTextFace( hdc )
-        #print "Default font: " + self.default_font
+
+        # https://stackoverflow.com/questions/6057239/which-font-is-the-default-for-mfc-dialog-controls
+        self.non_client_metrics = win32gui.SystemParametersInfo( win32con.SPI_GETNONCLIENTMETRICS, None, 0 )
+        self.default_font = self.non_client_metrics[ 'lfMessageFont' ].lfFaceName
         
-        win32gui.ReleaseDC( self.main_window.window_handle, hdc )
+        self.button_font = win32gui.CreateFontIndirect( self.non_client_metrics[ 'lfMessageFont' ] )
+
+        #print "Default font: " + self.default_font
         keys = ( 'title', 'details', 'notification', 'splash' )
         font_config = self.config.get( 'font_styles', {} )
-        self.fonts = { key: self.create_font( **font_config.get(key, {}) ) for key in keys }
+        self.fonts = { key: self.create_font( hdc, **font_config.get(key, {}) ) for key in keys }
+        
+        win32gui.ReleaseDC( self.main_window.window_handle, hdc )
 
     class StatusDisplay( object ):
 
@@ -1164,10 +1223,13 @@ class WinapiGUI(BaseGUI):
             pass
 
         self.notification_text = Window.TextLayer( text = self.config['main_window'].get( 'initial_notification', ' ' ),
-                                            rect = self.main_window.get_client_region(),
-                                            font = self.fonts['notification'])
+                                                   rect = self.main_window.get_client_region(),
+                                                   font = self.fonts['notification'],
+                                                   style = win32con.DT_SINGLELINE | win32con.DT_END_ELLIPSIS )
 
         self.main_window.layers.append( self.notification_text )
+        
+        self.create_controls()
         self.create_displays()
         self.layout_displays()
         
@@ -1192,8 +1254,6 @@ class WinapiGUI(BaseGUI):
                          self.systray_window ]
 
         self.set_status( 'normal' )
-
-        self.create_controls()
 
         #FIXME: Does not run!
         #
@@ -1268,6 +1328,27 @@ class WinapiGUI(BaseGUI):
             
         if details is not None:
             display.details.set_props( self.main_window, text = details )
+
+        if color is not None:
+            
+            def decode( pattern, scale, value ):
+                match = re.match( pattern, value )
+                hexToInt = lambda hex: int( int( hex, 16 ) * scale )
+                return tuple( map( hexToInt, match.groups() ) )
+
+            decoders = [
+                functools.partial( decode, '^#([\w]{2})([\w]{2})([\w]{2})$', 1 ),
+                functools.partial( decode, '^#([\w]{1})([\w]{1})([\w]{1})$', 255.0/15.0 )
+            ]
+
+            for decoder in decoders:
+                try:
+                    rgb = win32api.RGB( *decoder(color) )
+                    display.title.set_props( self.main_window, color = rgb )
+                    display.details.set_props( self.main_window, color = rgb )
+                    break
+                except AttributeError:
+                    pass
             
         if icon is not None:
             display.icon.source = PIL.Image.open( self.get_image_path( icon ) )
