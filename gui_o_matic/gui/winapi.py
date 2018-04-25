@@ -718,6 +718,9 @@ class Window( object ):
                 (screen_size[ 1 ] + height)/2)
         self.set_size( rect )
 
+    def focus( self ):
+        win32gui.SetForegroundWindow( self.window_handle )
+
     def set_icon( self, small_icon, big_icon ):
         # https://stackoverflow.com/questions/16472538/changing-taskbar-icon-programatically-win32-c
         #
@@ -1190,7 +1193,7 @@ class WinapiGUI(BaseGUI):
         def show_main_window():
             win32gui.ShowWindow( self.main_window.window_handle,
                                  win32con.SW_SHOWNORMAL )
-            win32gui.SetForegroundWindow( self.main_window.window_handle )
+            self.main_window.focus()
 
         def minimize_main_window(*ignored ):
             win32gui.ShowWindow( self.main_window.window_handle,
@@ -1447,6 +1450,7 @@ class WinapiGUI(BaseGUI):
 
         self.splash_window.center()
         self.splash_window.set_visibility( True )
+        self.splash_window.focus()
 
     def hide_splash_screen(self):
         self.splash_window.set_visibility( False )
@@ -1455,6 +1459,7 @@ class WinapiGUI(BaseGUI):
 
     def show_main_window(self):
         self.main_window.set_visibility( True )
+        self.main_window.focus()
 
     def hide_main_window(self):
         self.main_window.set_visibility( False )
