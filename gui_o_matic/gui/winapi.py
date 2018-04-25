@@ -555,8 +555,8 @@ class Window( object ):
             win32gui.MoveWindow( self.handle,
                                  rect[ 0 ],
                                  rect[ 1 ],
-                                 rect[ 2 ],
-                                 rect[ 3 ],
+                                 rect[ 2 ] - rect[ 0 ],
+                                 rect[ 3 ] - rect[ 1 ],
                                  True )
 
             
@@ -697,8 +697,8 @@ class Window( object ):
         win32gui.MoveWindow( self.window_handle,
                              rect[ 0 ],
                              rect[ 1 ],
-                             rect[ 2 ],
-                             rect[ 3 ],
+                             rect[ 2 ] - rect[ 0 ],
+                             rect[ 3 ] - rect[ 1 ],
                              True )
 
     @staticmethod
@@ -710,10 +710,12 @@ class Window( object ):
     def center( self ):
         rect = self.get_size()
         screen_size = self.screen_size()
-        rect = ((screen_size[ 0 ] - rect[ 2 ])/2,
-                (screen_size[ 1 ] - rect[ 3 ])/2,
-                rect[ 2 ],
-                rect[ 3 ])
+        width = rect[2]-rect[0]
+        height = rect[3]-rect[1]
+        rect = ((screen_size[ 0 ] - width)/2,
+                (screen_size[ 1 ] - height)/2,
+                (screen_size[ 0 ] + width)/2,
+                (screen_size[ 1 ] + height)/2)
         self.set_size( rect )
 
     def set_icon( self, small_icon, big_icon ):
@@ -991,8 +993,8 @@ class WinapiGUI(BaseGUI):
 
             rect = (x_offset,
                     y_offset - height,
-                    width,
-                    height)
+                    x_offset + width,
+                    y_offset)
             
             button.set_size( rect )
             x_offset += width + spacing
@@ -1207,6 +1209,7 @@ class WinapiGUI(BaseGUI):
                                   size = window_size,
                                   messages = { win32con.WM_CLOSE: minimize_main_window })
 
+        self.main_window.center()
         self.compositor = Window.CompositorLayer()
         self.main_window.layers.append( self.compositor )
         
@@ -1402,7 +1405,7 @@ class WinapiGUI(BaseGUI):
 
             if width and height:
                 pass
-            if height and not width:
+            elif height and not width:
                 width = height * image.size[0] / image.size[1]
             elif width and not height:
                 height = width * image.size[1] / image.size[0]
@@ -1412,8 +1415,6 @@ class WinapiGUI(BaseGUI):
                 
         if width and height:
             self.splash_window.set_size( (0, 0, width, height) )
-        else:
-            print( "using default splash size" )
 
         # TODO: position splash text
         #
