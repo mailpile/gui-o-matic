@@ -655,7 +655,6 @@ class Window( object ):
              self._notify_event_id: self._on_notify,
              }
         self.message_map.update( messages )
-
         self.window_class = win32gui.WNDCLASS()
         self.window_class.style = win32con.CS_HREDRAW | win32con.CS_VREDRAW
         self.window_class.lpfnWndProc = self.message_map
@@ -884,6 +883,10 @@ class WinapiGUI(BaseGUI):
     _variable_re = re.compile( "%\(([\w]+)\)s" )
 
     _progress_range = 1000
+
+    # Signal that our Queue should be drained
+    #
+    WM_USER_QUEUE = win32con.WM_USER + 26
 
     def _lookup_token( self, match ):
         '''
@@ -1176,6 +1179,23 @@ class WinapiGUI(BaseGUI):
             self.main_window.layers.extend( layers )
             self.compositor.operations.append( display.icon )
 
+    def _process_queue( self, *ignored ):
+        '''
+        Drain the thread-safe action queue inside winproc for synchrounous gui side-effects
+        '''
+        while self.queue:
+            try:
+                msg = self.queue.get_nowait()
+                msg()
+            except Queue.Empty:
+                break
+
+    def _signal_queue( self ):
+        '''
+        signal that there are actions to process in the queue
+        '''
+        win32gui.PostMessage( self.systray_window.window_handle, self.WM_USER_QUEUE, 0, 0 )
+
     def run( self ):
         '''
         Initialize GUI and enter run loop
@@ -1185,9 +1205,11 @@ class WinapiGUI(BaseGUI):
         self.appid = unicode( uuid.uuid4() )
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(self.appid)
         win32gui.InitCommonControls()
-            
+
+        user_messages = { self.WM_USER_QUEUE: self._process_queue }
         self.systray_window = Window(title = self.config['app_name'],
-                                     style = Window.systray_style)
+                                     style = Window.systray_style,
+                                     messages = user_messages )
 
 
         def show_main_window():
@@ -1279,9 +1301,13 @@ class WinapiGUI(BaseGUI):
         # exit reason
         #
         try:
+            win32gui.PumpMessages()
+            '''
             while win32gui.PumpWaitingMessages() == 0:
                 if not self.queue:
                     continue
+
+                self._signal_queue()
                 
                 while True:
                     try:
@@ -1289,6 +1315,7 @@ class WinapiGUI(BaseGUI):
                         msg()
                     except Queue.Empty:
                         break
+            '''
                     
         finally:
             # Windows 10's CRT crashes if we leave windows open
@@ -1509,7 +1536,7 @@ class AsyncWrapper( object ):
     adjust behavior.
     '''
 
-    def __init__( self, cls, touchup ):
+    def __init__( self, cls, touchup, get_signal ):
         '''
         Create a class-like object that wraps creating the specifed class with
         an async proxy interface.
@@ -1517,9 +1544,10 @@ class AsyncWrapper( object ):
         self.cls = cls
         self.proxy = type( "Proxy_" + cls.__name__, (cls,), {} )
         self.touchup = touchup
+        self.get_signal = get_signal
 
     @staticmethod
-    def wrap( function, queue ):
+    def wrap( function, queue, signal ):
         '''
         Wrap calling functions as async queue messages
         '''
@@ -1527,6 +1555,7 @@ class AsyncWrapper( object ):
         def post_message( *args, **kwargs ):
             msg = functools.partial( function, *args, **kwargs )
             queue.put( msg )
+            signal()
 
         return post_message
 
@@ -1539,15 +1568,20 @@ class AsyncWrapper( object ):
         proxy = self.proxy( *args, **kwargs )
         queue = Queue.Queue()
 
+        signal = self.get_signal(target)
+
         for attr in dir( target ):
             if attr.startswith('_'):
                 continue
             value = getattr( target, attr )
             if callable( value ):
-                setattr( proxy, attr, self.wrap(value,queue) )
+                setattr( proxy, attr, self.wrap(value ,queue, signal) )
 
         self.touchup( target, proxy, queue )
         return proxy
+
+def signal_gui( winapi ):
+    return winapi._signal_queue
 
 def touchup_winapi_gui( self, proxy, queue ):
     '''
@@ -1560,4 +1594,4 @@ def touchup_winapi_gui( self, proxy, queue ):
     self.queue = queue
     proxy.run = self.run
 
-GUI = AsyncWrapper( WinapiGUI, touchup_winapi_gui )
+GUI = AsyncWrapper( WinapiGUI, touchup_winapi_gui, signal_gui )
