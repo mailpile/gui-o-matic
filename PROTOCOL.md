@@ -53,6 +53,9 @@ section means. They should be omitted from any actual implementation
         "app_name": "Your App Name",
         "app_icon": "/reference/or/absolute/path/to/icon.png",
 
+        # i18n hint to GUI: ltr, rtl, ...?
+        "text_direction": "ltr",
+
         # These are for testing only; implementations may ignore them.
         "_require_gui": ["unity", "macosx", "gtk"],
         "_prefer_gui": ["unity", "macosx", "gtk"],

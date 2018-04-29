@@ -91,7 +91,7 @@ class GUIPipeControl(threading.Thread):
                 time.sleep(30)
                 raise
 
-    def bootstrap(self):
+    def bootstrap(self, dry_run=False):
         assert(self.config is None)
         assert(self.gui is None)
 
@@ -108,9 +108,10 @@ class GUIPipeControl(threading.Thread):
 
         self.config = json.loads(''.join(config))
         self.gui = AutoGUI(self.config)
-        if listen:
-            self.start()
-        self.gui.run()
+        if not dry_run:
+            if listen:
+                self.start()
+            self.gui.run()
 
     def do(self, command, kwargs):
         if hasattr(self.gui, command):
