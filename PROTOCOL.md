@@ -109,9 +109,17 @@ In `font_styles`, we define font styles used in different parts of the app.
                 "italic": True
             },
 
+            # Title and detail styles can be scoped to only apply to
+            # a single status display, by prepending the ID.
+            "id_title": { ... },
+            "id_details": { ... },
+
             # The main-window may have a standalone notification element,
             # for messages that don't go anywhere else.
             "notification": { ... },
+
+            # Labels on buttons in the main window
+            "buttons": { ... }
 
             # The progress reporting label on the splash screen
             "splash": { ... }

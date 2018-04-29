@@ -70,6 +70,8 @@ class GtkBaseGUI(BaseGUI):
             if action.get('type', 'button') == 'button':
                 widget = gtk.Button(label=action.get('label', 'OK'))
                 event = "clicked"
+                if 'buttons' in self.font_styles:
+                    widget.get_child().modify_font(self.font_styles['buttons'])
 #
 # Disabled for now - what was supposed to happen when the box was ticked
 # or unticked was never really resolved in a satisfactory way.
@@ -122,8 +124,12 @@ class GtkBaseGUI(BaseGUI):
 
     def _main_window_default_style(self):
         wcfg = self.config['main_window']
+
+        button_style = self.config.get('font_styles', {}).get('buttons', {})
+        border_padding = int(2 * button_style.get('points', 10) / 3)
+
         vbox = gtk.VBox(False, 0)
-        vbox.set_border_width(7)
+        vbox.set_border_width(border_padding)
 
         # Enforce that the window always has at least one status section,
         # even if the configuration doesn't specify one.
@@ -139,14 +145,17 @@ class GtkBaseGUI(BaseGUI):
         for st in sd_defs:
             ss = {
                 'id': st['id'],
-                'hbox': gtk.HBox(False, 5),
-                'vbox': gtk.VBox(False, 5),
+                'hbox': gtk.HBox(False, border_padding),
+                'vbox': gtk.VBox(False, border_padding),
                 'title': gtk.Label(),
                 'details': gtk.Label()}
 
             for which in ('title', 'details'):
                 ss[which].set_markup(st.get(which, ''))
-                if which in self.font_styles:
+                exact = '%s_%s' % (ss['id'], which)
+                if exact in self.font_styles:
+                    ss[which].modify_font(self.font_styles[exact])
+                elif which in self.font_styles:
                     ss[which].modify_font(self.font_styles[which])
 
             if 'icon' in st:
@@ -179,7 +188,7 @@ class GtkBaseGUI(BaseGUI):
         if wcfg.get('background'):
             self._set_background_image(vbox, wcfg.get('background'))
 
-        button_box = gtk.HBox(False, 5)
+        button_box = gtk.HBox(False, border_padding)
 
         self._main_window_indicator(vbox, button_box)
         self._main_window_add_action_items(button_box)
@@ -424,7 +433,15 @@ class GtkBaseGUI(BaseGUI):
 
     def set_item(self, id=None, label=None, sensitive=None):
         if label is not None and id and id in self.items:
-            gobject.idle_add(self.items[id].set_label, label)
+            def set_label(label):
+                obj = self.items[id]
+                if (isinstance(obj, gtk.Button)
+                        and 'buttons' in self.font_styles):
+                    obj.set_label(' %s ' % label)
+                    obj.get_child().modify_font(self.font_styles['buttons'])
+                else:
+                    obj.set_label(label)
+            gobject.idle_add(set_label, label)
         if sensitive is not None and id and id in self.items:
             gobject.idle_add(self.items[id].set_sensitive, sensitive)
 
