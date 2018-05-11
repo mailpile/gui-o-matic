@@ -91,6 +91,9 @@ script = {
             "points": 10,
             "italic": True
         },
+        "buttons": {
+            "points":8
+        }
     },
     "main_window": {
         "show": False,
@@ -130,7 +133,7 @@ script = {
                 "details": "Greetings and salutations to all!"
             },{
                 "id": "id2",
-                "icon": "image:attention",
+                #"icon": "image:attention",
                 "title": "Launching Frobnicator",
                 "details": "The beginning and end of all things...\n...or is it?"
             }

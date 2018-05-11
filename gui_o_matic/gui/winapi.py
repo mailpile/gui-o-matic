@@ -984,7 +984,9 @@ class WinapiGUI(BaseGUI):
             button = item[ 'control' ]
             
             hdc = win32gui.GetDC( button.handle )
+            prior_font = win32gui.SelectObject( hdc, self.fonts['buttons'] )
             width, height = win32gui.GetTextExtentPoint32( hdc, action.label )
+            win32gui.SelectObject( hdc, prior_font )
             win32gui.ReleaseDC( None, hdc )
             
             width = max( width + padding , min_width )
@@ -1037,7 +1039,7 @@ class WinapiGUI(BaseGUI):
 
     def create_button_control( self, action ):
         control = Window.Button( self.main_window, (10,10,100,30), action )
-        control.set_font( self.button_font )
+        control.set_font( self.fonts['buttons'] )
         return control
 
     def create_controls( self ):
@@ -1109,18 +1111,18 @@ class WinapiGUI(BaseGUI):
         self.non_client_metrics = win32gui.SystemParametersInfo( win32con.SPI_GETNONCLIENTMETRICS, None, 0 )
         self.default_font = self.non_client_metrics[ 'lfMessageFont' ].lfFaceName
         
-        self.button_font = win32gui.CreateFontIndirect( self.non_client_metrics[ 'lfMessageFont' ] )
-
         #print "Default font: " + self.default_font
-        keys = ( 'title', 'details', 'notification', 'splash' )
+        keys = ( 'title', 'details', 'notification', 'splash', 'buttons' )
         font_config = self.config.get( 'font_styles', {} )
         self.fonts = { key: self.create_font( hdc, **font_config.get(key, {}) ) for key in keys }
-        
+        if 'buttons' not in self.fonts:
+            self.fonts['buttons'] = win32gui.CreateFontIndirect( self.non_client_metrics[ 'lfMessageFont' ] )
+
         win32gui.ReleaseDC( self.main_window.window_handle, hdc )
 
     class StatusDisplay( object ):
 
-        def __init__( self, gui, id, icon, title = ' ', details = ' ' ):
+        def __init__( self, gui, id, icon = None, title = ' ', details = ' ' ):
             self.title = Window.TextLayer( text = title,
                                            rect = (0,0,0,0),
                                            style = win32con.DT_SINGLELINE,
@@ -1128,7 +1130,7 @@ class WinapiGUI(BaseGUI):
             self.details = Window.TextLayer( text = details,
                                              rect = (0,0,0,0),
                                              font = gui.fonts[ 'details' ] )
-            self.icon = Compositor.Blend( PIL.Image.open( gui.get_image_path( icon ) ) )
+            self.icon = Compositor.Blend( gui.open_image( icon ) )
 
             self.id = id
 
@@ -1384,7 +1386,7 @@ class WinapiGUI(BaseGUI):
                     pass
             
         if icon is not None:
-            display.icon.source = PIL.Image.open( self.get_image_path( icon ) )
+            display.icon.source = self.open_image( icon )
             self.compositor.invalidate()
             win32gui.InvalidateRect( self.main_window.window_handle,
                                      display.rect,
@@ -1398,6 +1400,12 @@ class WinapiGUI(BaseGUI):
 
     def set_next_error_message(self, message=None):
         self.next_error_message = message
+
+    def open_image( self, name ):
+        if name:
+            return PIL.Image.open( self.get_image_path( name ) )
+        else:
+            return PIL.Image.new("RGBA", (1,1), color = (0,0,0,0))
 
     def get_image_path( self, name ):
         prefix = 'image:'
