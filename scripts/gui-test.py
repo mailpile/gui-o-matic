@@ -92,7 +92,7 @@ script = {
             "italic": True
         },
         "buttons": {
-            "points":8
+            "points":14
         }
     },
     "main_window": {

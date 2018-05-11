@@ -989,7 +989,7 @@ class WinapiGUI(BaseGUI):
             win32gui.SelectObject( hdc, prior_font )
             win32gui.ReleaseDC( None, hdc )
             
-            width = max( width + padding , min_width )
+            width = max( width + padding * 2, min_width )
             height = max( height + padding, min_height )
 
             # create new row if wrapping needed(not well tested)
@@ -1252,10 +1252,11 @@ class WinapiGUI(BaseGUI):
         except KeyError:
             pass
 
+        notification_style = win32con.DT_SINGLELINE | win32con.DT_END_ELLIPSIS | win32con.DT_VCENTER
         self.notification_text = Window.TextLayer( text = self.config['main_window'].get( 'initial_notification', ' ' ),
                                                    rect = self.main_window.get_client_region(),
                                                    font = self.fonts['notification'],
-                                                   style = win32con.DT_SINGLELINE | win32con.DT_END_ELLIPSIS )
+                                                   style = notification_style)
 
         self.main_window.layers.append( self.notification_text )
         
