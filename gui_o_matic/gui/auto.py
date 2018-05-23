@@ -1,28 +1,30 @@
 import copy
 import importlib
 
-# Note--only dict because of gtk gui
+# Note: This is NOT dict, because order matters.
+#       Some GUIs are better than others, and we want to try them first.
 #
-_registry = {
-    'winapi':   'winapi',
-    'macosx':   'macosx',
-    'gtk':      'gtkbase', # The only non-identity mapping...
-    'unity':    'unity',
-}
+_registry = (
+    ('winapi',  'winapi'),
+    ('macosx',  'macosx'),
+    ('unity',   'unity'),
+    ('gtk',     'gtkbase'),
+)
 
 
-def known_guis():
+def _known_guis():
     '''
     List known guis.
     '''
-    return _registry.keys()
+    return [gui for gui, lib in _registry]
 
-def gui_libname( gui ):
+
+def _gui_libname(gui):
     '''
     Convert a gui-name to a libname, assume well-formed if not in registry
     '''
     try:
-        return 'gui_o_matic.gui.{}'.format( _registry[ gui ] )
+        return 'gui_o_matic.gui.{}'.format(dict(_registry)[gui])
     except KeyError:
         return gui
 
@@ -31,9 +33,9 @@ def AutoGUI(config, *args, **kwargs):
     """
     Load and instanciate the best GUI available for this machine.
     """
-    for candidate in config.get( '_prefer_gui', known_guis() ):
+    for candidate in config.get('_prefer_gui', _known_guis()):
         try:
-            impl = importlib.import_module( gui_libname( candidate ) )
+            impl = importlib.import_module(_gui_libname(candidate))
             return impl.GUI( config, *args, **kwargs )
         except ImportError:
             pass
