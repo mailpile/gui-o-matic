@@ -7,7 +7,7 @@ except ImportError:
 from setuptools import setup, find_packages
 
 # Do not edit: The VERSION gets updated by the update-version script
-VERSION = '0.1.48'
+VERSION = '0.1.87'
 
 setup(
     name='gui_o_matic',
