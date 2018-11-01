@@ -48,8 +48,7 @@ class GUIPipeControl(threading.Thread):
                     self.sock = self.listening.accept()[0]
                     break
                 except socket.timeout:
-                    if self.child.poll() is not None:
-                        raise
+                    pass
         else:
             self.listening.settimeout(60)
             self.sock = self.listening.accept()[0]
